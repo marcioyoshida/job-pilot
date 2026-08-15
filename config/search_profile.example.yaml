@@ -27,6 +27,11 @@ greenhouse_boards:
   - "gitlab"
   - "coinbase"
 
+# Lever public job boards to poll (Phase P0, ToS-clean). Values are the company
+# tokens from a jobs.lever.co/<token> URL.
+lever_companies:
+  - "netflix"
+
 # Phase P only — the owner's OWN LinkedIn accounts (see CON-1 / CLAUDE.md).
 # `label` selects which env credentials to use, e.g. LINKEDIN_ACCT1_USER /
 # LINKEDIN_ACCT1_PASS. `saved_search` names a filter set to run.

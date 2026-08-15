@@ -11,12 +11,15 @@ Goal: a working single-user tool for the owner's own job search.
 
 - **P0 — spine (DONE 2026-08-15).** `SearchProfile` config + `JobSource`
   interface + diff engine + `JsonState`, plus a working **Greenhouse** source
-  (`src/ingest/greenhouse.py`): public boards API → `Posting`, HTML→text JD, a
-  pure `matches()` filter, injectable HTTP for tests. Wired into `run.py gather`
-  end-to-end into deduped, new-only postings. Tests: `tests/test_greenhouse.py`
-  (16 total green). **Live-verify pending:** this build's egress policy blocks
-  `boards-api.greenhouse.io`, so run `python -m src.ingest.greenhouse gitlab` on
-  an unrestricted network once to confirm the schema (house rule).
+  (`src/ingest/greenhouse.py`) **and Lever** (`src/ingest/lever.py`) sources:
+  public APIs → `Posting`, shared `src/ingest/filters.py` (HTML→text, recency,
+  `matches()`) and `src/ingest/http.py` (injectable HTTP for tests). Both wired
+  into `run.py gather` end-to-end into deduped, new-only postings. Tests:
+  `tests/test_greenhouse.py`, `tests/test_lever.py` (20 total green).
+  **Live-verify pending:** this build's egress policy blocks the job-board
+  hosts, so run `python -m src.ingest.greenhouse gitlab` and
+  `python -m src.ingest.lever netflix` on an unrestricted network once to
+  confirm the schemas (house rule).
 - **P1 — LinkedIn (own accounts).** Implement `src/ingest/linkedin.py` behind
   `JobSource`: session-based, 2 accounts from config, saved-search filters,
   human-paced (jitter + hard daily cap). Credentials from env/secret only.
@@ -43,7 +46,7 @@ Goal: a working single-user tool for the owner's own job search.
 
 ## First thing next session
 
-P0 is done. Next: either **live-verify Greenhouse** (run the one-liner above on
-an open network, adjust the mapping if the real schema differs) + add the
-**Lever** source the same way, or start **P1** (own-account LinkedIn). Tests
-cover diff, taxonomy, fit, and the Greenhouse mapping/filtering.
+P0 is done (Greenhouse + Lever). Next: either **live-verify** the two sources on
+an open network (adjust mappings if the real schemas differ), or start **P1**
+(own-account LinkedIn), or **P2** (extraction/matching over what's gathered).
+Tests cover diff, taxonomy, fit, and both source mappings/filters.
