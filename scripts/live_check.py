@@ -2,10 +2,8 @@
 """Live-verify the AWS + Bedrock path for job-pilot.
 
 Run this on a machine with real my2027 credentials (this proves the LLM path
-end-to-end; the offline heuristic never needs it). Usage:
+end-to-end; the offline heuristic never needs it). Usage (venv active):
 
-    uv run python scripts/live_check.py
-    #  or, with a plain venv active:
     python scripts/live_check.py
 
 It checks: boto3 present -> STS caller identity (expects account 668449743071)
@@ -23,7 +21,7 @@ def main() -> int:
     try:
         import boto3
     except ImportError:
-        print("boto3 not installed — run `uv sync` or `pip install boto3`.")
+        print("boto3 not installed — activate the venv and `pip install -r requirements.txt`.")
         return 2
 
     region = os.environ.get("AWS_REGION") or "us-east-1"

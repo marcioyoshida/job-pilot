@@ -1,23 +1,18 @@
 # Getting started (Phase P, local)
 
-### Set up the environment
-
-**With uv (recommended — reproducible via `uv.lock`):**
+### Set up the environment (venv + pip)
 
 ```bash
-uv sync                      # creates .venv and installs deps (incl. boto3)
-uv run pytest -q             # run the tests
-uv run python run.py gather --profile config/search_profile.yaml
-```
-
-**With a plain venv + pip:**
-
-```bash
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r requirements.txt -r requirements-dev.txt
-pytest -q
+
+pytest -q                            # run the tests
 python run.py gather --profile config/search_profile.yaml
 ```
+
+Activate the venv (`source .venv/bin/activate`) in each new shell before running
+the commands below, or prefix them with `.venv/bin/`.
 
 ### Configure your search
 
@@ -74,7 +69,7 @@ If AWS creds/network aren't available, `--llm` prints a notice and falls back to
 the heuristic. Live-verify the whole AWS + Bedrock path once on your machine:
 
 ```bash
-uv run python scripts/live_check.py     # STS identity + a tiny Bedrock Converse call
+python scripts/live_check.py            # STS identity + a tiny Bedrock Converse call
 ```
 
 Guardrail: the LLM extractor keeps a skill only if the model returns a verbatim
