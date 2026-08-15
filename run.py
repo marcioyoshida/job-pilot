@@ -88,15 +88,26 @@ def cmd_pipeline(args) -> int:
     for p in fresh:
         reqs = extract_requirements(p)
         fit = analyze_fit(reqs, cand_skills)
-        rows.append((p, fit))
-    rows.sort(key=lambda r: r[1].fit_score, reverse=True)
+        rows.append((p, reqs, fit))
+    rows.sort(key=lambda r: r[2].fit_score, reverse=True)
 
     print(f"{len(rows)} new posting(s), ranked by fit (score is ESTIMATED):\n")
-    for p, fit in rows:
+    made = 0
+    for p, reqs, fit in rows:
         gaps = ", ".join(fit.gaps[:6]) or "none"
         print(f"  {fit.fit_score:>5.0%}  [{fit.recommendation:<7}] {p.company} — {p.title}")
         print(f"         gaps: {gaps}")
         print(f"         {p.source_url}")
+        # Draft tailored materials for worth-applying roles (DRAFT — not submitted).
+        if args.tailor and fit.recommendation in ("apply", "stretch"):
+            from src.tailor.build import build_materials, write_materials
+
+            materials = build_materials(candidate, p, reqs, fit)
+            path = write_materials(materials, p, args.materials_dir)
+            print(f"         draft materials -> {path}  (PENDING YOUR APPROVAL)")
+            made += 1
+    if args.tailor:
+        print(f"\n{made} draft package(s) written. Review before any submission (Stage 5).")
     return 0
 
 
@@ -108,6 +119,9 @@ def main(argv: list[str] | None = None) -> int:
         sp.add_argument("--profile", default="config/search_profile.yaml")
         if name == "pipeline":
             sp.add_argument("--candidate", default="config/candidate.yaml")
+            sp.add_argument("--tailor", action="store_true",
+                            help="write DRAFT tailored materials for apply/stretch roles")
+            sp.add_argument("--materials-dir", default="materials")
     args = parser.parse_args(argv)
     return {"gather": cmd_gather, "pipeline": cmd_pipeline}[args.cmd](args)
 

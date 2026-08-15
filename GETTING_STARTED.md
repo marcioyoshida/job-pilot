@@ -29,6 +29,21 @@ export LINKEDIN_ACCT2_PASS=...
 `.gitignore` already excludes `.env`, `config/search_profile.yaml`, `.jobpilot/`,
 and any candidate data/materials.
 
+## Running behind a VPN / corporate proxy
+
+A plain VPN is transparent routing — no config needed. Two things to know:
+
+- **Geography:** job-board and (later) LinkedIn requests exit from your VPN's
+  IP, so location-filtered results follow that IP's country/region. Set your
+  VPN region to match the market you're targeting.
+- **Proxy:** if your setup is actually an HTTP proxy, `urllib` honors the
+  `HTTPS_PROXY` / `*_proxy` environment variables automatically. If the proxy
+  adds latency, bump the request timeout:
+
+  ```bash
+  export JOBPILOT_HTTP_TIMEOUT_S=45
+  ```
+
 ## What's implemented vs stubbed
 
 - **Real:** data types (`src/ingest/base.py`), state (`src/state/store.py`

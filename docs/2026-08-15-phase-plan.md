@@ -33,8 +33,16 @@ Goal: a working single-user tool for the owner's own job search.
   yaml` feed `analyze_fit`. `run.py pipeline` runs gather→extract→match ranked
   by fit. Tests: `tests/test_extract.py`, `tests/test_pipeline_integration.py`
   (28 total green).
-- **P3 — tailor.** Structured master resume → tailored highlights + cover letter
-  + drafted screening answers. Draft-only; no fabrication.
+- **P3 — tailor (DONE 2026-08-15).** `src/tailor/`: `resume.py` ranks master
+  bullets by relevance and emits highlights with `bullet_provenance` (every
+  highlight verbatim from a real bullet id) + `verify_provenance` guard;
+  `cover_letter.py` writes an honest templated letter (never overclaims, never
+  surfaces work-auth as a talking point) + defers salary/visa/demographic
+  screening questions; `build.py` assembles a DRAFT `MaterialsVersion` (refuses
+  to emit if provenance fails) and writes it to `materials/{date}/` (gitignored,
+  `status=draft_pending_approval`). `run.py pipeline --tailor` produces drafts
+  for apply/stretch roles. LLM prose left as guarded seams. Tests:
+  `tests/test_tailor.py` (34 total green).
 - **P4 — approval + submit.** Review queue (approval gate) → email / one-click
   package submission + receipts.
 - **P5 — monitor.** Status lifecycle + inbox parsing + manual override +
@@ -53,9 +61,10 @@ Goal: a working single-user tool for the owner's own job search.
 
 ## First thing next session
 
-P0 + P2 are done. Next: **P3 — tailoring** (structured master resume →
-provenance-checked highlights + cover letter + drafted screening answers,
-draft-only), or **P1 — own-account LinkedIn**, or the **P2-LLM** upgrade
-(BedrockExtractor for higher recall on responsibilities/comp/certs). Tests cover
-diff, taxonomy, fit, both source mappings/filters, heuristic extraction, and the
-offline end-to-end chain.
+P0 + P2 + P3 are done — gather→extract→match→tailor runs offline end-to-end.
+Next: **P4 — approval + submit** (review queue over the DRAFT materials, then
+email / one-click-package submission with idempotent receipts), or **P1 —
+own-account LinkedIn**, or the **LLM upgrade** (BedrockExtractor +
+LLM cover-letter prose). Tests cover diff, taxonomy, fit, both source
+mappings/filters, heuristic extraction, tailoring/provenance, and the offline
+end-to-end chain.
