@@ -42,6 +42,13 @@ and any candidate data/materials.
 python run.py pipeline --tailor \
   --profile config/search_profile.yaml --candidate config/candidate.yaml
 
+# optional: also pull LinkedIn jobs from your saved-search ALERT emails
+#   set up: LinkedIn → Jobs → save a search → turn alerts on (do this per account)
+python run.py pipeline --tailor --linkedin-gmail \
+  --profile config/search_profile.yaml --candidate config/candidate.yaml
+#   or from an exported JSON of alert emails:
+# python run.py pipeline --tailor --linkedin-inbox alerts.json ...
+
 python run.py review                 # list applications + status
 python run.py approve --key <key>    # or --all  (approval is REQUIRED)
 python run.py submit                 # prepares one-click packages / email drafts

@@ -27,7 +27,18 @@ def _load_profile(path: str):
     return SearchProfile.from_dict(data or {})
 
 
-def _sources(profile):
+def _linkedin_inbox(args):
+    """Build the inbox that holds LinkedIn job-alert emails, or None."""
+    if getattr(args, "linkedin_inbox", None):
+        from src.monitor.inbox import FileInbox
+        return FileInbox(args.linkedin_inbox)
+    if getattr(args, "linkedin_gmail", False):
+        from src.monitor.inbox import GmailImapInbox
+        return GmailImapInbox(limit=getattr(args, "limit", 50))
+    return None
+
+
+def _sources(profile, linkedin_inbox=None):
     """Build the enabled JobSource list. Wire real sources as they land."""
     from src.ingest.greenhouse import GreenhouseSource
     from src.ingest.lever import LeverSource
@@ -37,8 +48,9 @@ def _sources(profile):
         sources.append(GreenhouseSource(boards=profile.greenhouse_boards))
     if profile.lever_companies:
         sources.append(LeverSource(companies=profile.lever_companies))
-    # Phase P1: for acct in profile.linkedin_accounts:
-    #               sources.append(LinkedInSource(acct["label"]))
+    if linkedin_inbox is not None:
+        from src.ingest.linkedin import LinkedInAlertsSource
+        sources.append(LinkedInAlertsSource(linkedin_inbox))
     return sources
 
 
@@ -48,9 +60,10 @@ def cmd_gather(args) -> int:
 
     profile = _load_profile(args.profile)
     state = JsonState(STATE_PATH)
-    sources = _sources(profile)
+    sources = _sources(profile, _linkedin_inbox(args))
     if not sources:
-        print("No sources wired yet — implement one in src/ingest/ (Phase P0/P1).")
+        print("No sources configured. Set greenhouse_boards/lever_companies in the "
+              "profile, or pass --linkedin-inbox/--linkedin-gmail.")
         return 0
 
     collected = []
@@ -77,9 +90,10 @@ def cmd_pipeline(args) -> int:
     candidate = CandidateProfile.from_yaml(args.candidate)
     cand_skills = candidate.normalized_skills()
     state = JsonState(STATE_PATH)
-    sources = _sources(profile)
+    sources = _sources(profile, _linkedin_inbox(args))
     if not sources:
-        print("No sources wired yet — implement one in src/ingest/ (Phase P0/P1).")
+        print("No sources configured. Set greenhouse_boards/lever_companies in the "
+              "profile, or pass --linkedin-inbox/--linkedin-gmail.")
         return 0
 
     # LLM path (Bedrock) is opt-in; falls back to the offline heuristic on error.
@@ -259,6 +273,11 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("gather", "pipeline"):
         sp = sub.add_parser(name)
         sp.add_argument("--profile", default="config/search_profile.yaml")
+        sp.add_argument("--linkedin-inbox",
+                        help="JSON file of LinkedIn job-alert emails to ingest as a source")
+        sp.add_argument("--linkedin-gmail", action="store_true",
+                        help="read LinkedIn job-alert emails from Gmail (IMAP) as a source")
+        sp.add_argument("--limit", type=int, default=50)
         if name == "pipeline":
             sp.add_argument("--candidate", default="config/candidate.yaml")
             sp.add_argument("--tailor", action="store_true",

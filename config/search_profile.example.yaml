@@ -32,11 +32,10 @@ greenhouse_boards:
 lever_companies:
   - "netflix"
 
-# Phase P only — the owner's OWN LinkedIn accounts (see CON-1 / CLAUDE.md).
-# `label` selects which env credentials to use, e.g. LINKEDIN_ACCT1_USER /
-# LINKEDIN_ACCT1_PASS. `saved_search` names a filter set to run.
-linkedin_accounts:
-  - label: "acct1"
-    saved_search: "backend-remote-latam"
-  - label: "acct2"
-    saved_search: "staff-fintech"
+# LinkedIn is ingested via job-ALERT EMAILS, not scraping (ToS-clean). Set up a
+# saved search + email alert inside each LinkedIn account (Jobs → save search →
+# alerts on). Those alert emails are parsed into postings by:
+#   python run.py pipeline --linkedin-inbox alerts.json        # exported emails
+#   python run.py pipeline --linkedin-gmail                    # GMAIL_* env creds
+# The `keywords`/`titles`/`locations` above still filter what LinkedIn sends.
+# No LinkedIn credentials or config are needed here.

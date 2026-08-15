@@ -20,10 +20,17 @@ Goal: a working single-user tool for the owner's own job search.
   hosts, so run `python -m src.ingest.greenhouse gitlab` and
   `python -m src.ingest.lever netflix` on an unrestricted network once to
   confirm the schemas (house rule).
-- **P1 — LinkedIn (own accounts).** Implement `src/ingest/linkedin.py` behind
-  `JobSource`: session-based, 2 accounts from config, saved-search filters,
-  human-paced (jitter + hard daily cap). Credentials from env/secret only.
-  See CON-1 — accept the account risk knowingly.
+- **P1 — LinkedIn via alert emails (DONE 2026-08-15).** Chose the ToS-clean
+  path over direct scraping: `src/ingest/linkedin.py` `parse_linkedin_alert`
+  turns LinkedIn saved-search job-alert emails into Postings (title/company/
+  location/canonical job URL, defensive), and `LinkedInAlertsSource` reads them
+  from any `InboxSource` (FileInbox or GmailImapInbox), filtering to LinkedIn
+  alert senders, deduping by job id, applying the profile. Wired into
+  `gather`/`pipeline` via `--linkedin-inbox <file>` / `--linkedin-gmail`. No
+  LinkedIn creds or scraping; no account-ban risk. Limitation: alerts carry no
+  full JD, so extraction runs on the title. Direct-session scraping was
+  intentionally not built. Tests: `tests/test_linkedin_alerts.py` (55 total
+  green).
 - **P2 — extract + match (DONE 2026-08-15).** `HeuristicExtractor`
   (`src/extract/requirements.py`): deterministic, offline JD→`Requirements` —
   taxonomy skill scan with must/nice split + evidence spans, years/education/
