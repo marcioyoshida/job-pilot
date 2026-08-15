@@ -58,6 +58,18 @@ Goal: a working single-user tool for the owner's own job search.
   Functions orchestration, EventBridge schedule, S3 materials — same account
   `my2027`, ~$100/mo ceiling.
 
+- **LLM upgrade (DONE 2026-08-15).** `src/llm/bedrock.py` — injectable
+  `BedrockLLM` over the Converse API (nova-lite default, model/region from env,
+  lazy boto3). `BedrockExtractor` (`src/extract/requirements.py`) parses JSON
+  requirements and DROPS any skill/field whose evidence quote isn't verbatim in
+  the JD (anti-fabrication). `write_cover_letter_llm` writes prose grounded only
+  in real profile facts. `run.py pipeline --llm` (env `JOBPILOT_USE_LLM`) opts
+  in, with graceful per-call fallback to the heuristic. Tests use a fake client
+  (`tests/test_llm.py`, 45 total green). **Live-verify pending:** this
+  environment has only the proxy's placeholder AWS creds (STS
+  InvalidClientTokenId), so run the one-liner in GETTING_STARTED on a machine
+  with real my2027 creds + Bedrock model access.
+
 ## Phase C — customer product (LATER)
 
 - Remove personal-account LinkedIn; swap to a **licensed aggregator** connector

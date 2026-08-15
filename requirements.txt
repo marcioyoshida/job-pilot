@@ -1,1 +1,4 @@
 PyYAML>=6.0
+# Only needed for the optional LLM path (run.py pipeline --llm). The heuristic
+# extractor and the rest of the pipeline run without it.
+boto3>=1.34

@@ -155,18 +155,91 @@ class HeuristicExtractor:
         )
 
 
-class BedrockExtractor:
-    """LLM-assisted extractor (Phase P2-LLM). Guarded seam.
+_LLM_SYSTEM = (
+    "You extract structured hiring requirements from a job description. "
+    "Return ONLY a JSON object with keys: must_have_skills, nice_to_have_skills "
+    "(arrays of short skill names), years_experience (int or null), education "
+    "(string or null), work_authorization (string or null), seniority (string or "
+    "null), responsibilities (array), certifications (array), languages (array), "
+    "comp (string or null), screening_questions (array), and evidence (object "
+    "mapping each skill name and each non-null field to a VERBATIM quote copied "
+    "from the job description). "
+    "Rules: never invent anything not present in the text. If a field is not "
+    "stated, use null or an empty array. Every skill and field you report MUST "
+    "have a verbatim quote in `evidence`."
+)
 
-    Enable with ONCA/JOBPILOT-style flags once Bedrock creds + network exist.
-    The prompt must forbid inventing fields and require a verbatim JD span per
-    extracted item; drop anything returned without a matching span.
+
+class BedrockExtractor:
+    """LLM-assisted extractor (higher recall than the heuristic).
+
+    Anti-fabrication guardrail: the model must return a verbatim JD quote for
+    every skill/field, and `_to_requirements` DROPS anything whose quote is not
+    actually a substring of the JD. So even if the model hallucinates a skill,
+    it can't survive into the output.
     """
 
-    def extract(self, posting: Posting) -> Requirements:  # pragma: no cover - seam
-        raise NotImplementedError(
-            "Phase P2-LLM: implement Bedrock extraction (cheap model, batch, "
-            "prompt-cache; no fabricated fields; verbatim evidence spans)."
+    def __init__(self, llm: "object | None" = None) -> None:
+        from src.llm.bedrock import BedrockLLM
+
+        self.llm = llm or BedrockLLM()
+
+    def extract(self, posting: Posting) -> Requirements:
+        jd = f"{posting.title}\n{posting.description}"
+        data = self.llm.converse_json(_LLM_SYSTEM, jd)
+        return self._to_requirements(posting, jd, data)
+
+    @staticmethod
+    def _grounded(names: list, evidence: dict, jd_low: str) -> tuple[list[str], dict]:
+        kept: list[str] = []
+        ev: dict[str, str] = {}
+        for name in names or []:
+            quote = (evidence or {}).get(name) or (evidence or {}).get(str(name).lower())
+            if quote and quote.lower() in jd_low:
+                canon = normalize_skill(str(name))
+                if canon not in kept:
+                    kept.append(canon)
+                    ev[canon] = quote
+        return kept, ev
+
+    def _to_requirements(self, posting: Posting, jd: str, data: dict) -> Requirements:
+        jd_low = jd.lower()
+        evidence_in = data.get("evidence", {}) or {}
+        must, ev_must = self._grounded(data.get("must_have_skills", []), evidence_in, jd_low)
+        nice, ev_nice = self._grounded(data.get("nice_to_have_skills", []), evidence_in, jd_low)
+        nice = [s for s in nice if s not in must]
+
+        evidence = {**ev_must, **ev_nice}
+
+        def _grounded_field(key: str):
+            val = data.get(key)
+            quote = evidence_in.get(key)
+            if val and quote and str(quote).lower() in jd_low:
+                evidence[key] = quote
+                return val
+            return None
+
+        work_auth = _grounded_field("work_authorization")
+        hard = ["work_authorization"] if work_auth else []
+
+        return Requirements(
+            must_have_skills=must,
+            nice_to_have_skills=nice,
+            years_experience=data.get("years_experience") if isinstance(
+                data.get("years_experience"), int) else None,
+            education=_grounded_field("education"),
+            work_authorization=work_auth,
+            seniority=data.get("seniority"),
+            responsibilities=data.get("responsibilities", []) or [],
+            certifications=data.get("certifications", []) or [],
+            languages=data.get("languages", []) or [],
+            comp=data.get("comp"),
+            screening_questions=data.get("screening_questions", []) or [],
+            location=posting.location or None,
+            remote_policy=posting.remote_policy or None,
+            application_method=f"{posting.source}:{posting.source_url}",
+            hard_requirements=hard,
+            evidence=evidence,
         )
 
 

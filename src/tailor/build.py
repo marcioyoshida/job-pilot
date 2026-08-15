@@ -21,12 +21,21 @@ def build_materials(
     posting: Posting,
     reqs: Requirements,
     fit: FitAnalysis,
+    llm: "object | None" = None,
 ) -> MaterialsVersion:
     highlights, provenance = tailor_highlights(candidate, reqs, fit)
     top_bullet = highlights[0] if highlights else None
-    cover = write_cover_letter(
-        candidate, posting.company, posting.title, reqs, fit, top_bullet=top_bullet
-    )
+    if llm is not None:
+        from src.tailor.cover_letter import write_cover_letter_llm
+
+        cover = write_cover_letter_llm(
+            candidate, posting.company, posting.title, reqs, fit, llm,
+            top_bullet=top_bullet,
+        )
+    else:
+        cover = write_cover_letter(
+            candidate, posting.company, posting.title, reqs, fit, top_bullet=top_bullet
+        )
     answered, unanswered = draft_screening_answers(candidate, reqs)
 
     materials = MaterialsVersion(

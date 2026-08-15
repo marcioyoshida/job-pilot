@@ -75,6 +75,48 @@ def write_cover_letter(
     return _cap_words(text, max_words)
 
 
+_LLM_COVER_SYSTEM = (
+    "You write a concise, professional cover letter (<= {max_words} words). "
+    "Use ONLY the facts in the provided JSON. Do NOT invent employers, titles, "
+    "skills, metrics, or experience not present there. Be honest: you may note a "
+    "gap plainly but never overstate. Do NOT mention work authorization, visa "
+    "status, salary, or demographics. Return only the letter text."
+)
+
+
+def write_cover_letter_llm(
+    candidate: CandidateProfile,
+    company: str,
+    title: str,
+    reqs: Requirements,
+    fit: FitAnalysis,
+    llm: "object",
+    *,
+    top_bullet: str | None = None,
+    max_words: int = 300,
+) -> str:
+    """LLM-written letter grounded strictly in profile facts (CON-4).
+
+    We hand the model only real facts (candidate name/headline, real bullet
+    texts, matched skills, one soft gap). The human-approval gate (NFR-1) is the
+    backstop before anything is sent.
+    """
+    import json
+
+    facts = {
+        "candidate_name": candidate.name,
+        "candidate_headline": candidate.headline,
+        "company": company,
+        "role_title": title,
+        "matched_strengths": _strengths(fit, reqs),
+        "real_resume_bullets": [b.text for b in candidate.master_bullets],
+        "one_soft_gap": next((g for g in fit.gaps if g != "work_authorization"), None),
+    }
+    system = _LLM_COVER_SYSTEM.format(max_words=max_words)
+    text = llm.converse(system, json.dumps(facts), max_tokens=700, temperature=0.4)
+    return _cap_words(text.strip(), max_words)
+
+
 def _cap_words(text: str, max_words: int) -> str:
     words = text.split()
     if len(words) <= max_words:

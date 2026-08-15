@@ -71,6 +71,8 @@ def cmd_pipeline(args) -> int:
     from src.profile.candidate import CandidateProfile
     from src.state.store import JsonState
 
+    import os
+
     profile = _load_profile(args.profile)
     candidate = CandidateProfile.from_yaml(args.candidate)
     cand_skills = candidate.normalized_skills()
@@ -80,6 +82,23 @@ def cmd_pipeline(args) -> int:
         print("No sources wired yet — implement one in src/ingest/ (Phase P0/P1).")
         return 0
 
+    # LLM path (Bedrock) is opt-in; falls back to the offline heuristic on error.
+    use_llm = getattr(args, "llm", False) or os.environ.get("JOBPILOT_USE_LLM", "").lower() in (
+        "1", "true", "yes")
+    llm = None
+    extractor = None
+    if use_llm:
+        try:
+            from src.extract.requirements import BedrockExtractor
+            from src.llm.bedrock import BedrockLLM
+
+            llm = BedrockLLM()
+            extractor = BedrockExtractor(llm)
+            print(f"LLM path ON (model={llm.model_id}).\n")
+        except Exception as exc:  # noqa: BLE001
+            print(f"LLM unavailable ({exc}); falling back to heuristic.\n")
+            use_llm, llm, extractor = False, None, None
+
     collected = []
     for s in sources:
         collected.extend(s.fetch(profile))
@@ -87,7 +106,11 @@ def cmd_pipeline(args) -> int:
 
     rows = []
     for p in fresh:
-        reqs = extract_requirements(p)
+        try:
+            reqs = extractor.extract(p) if extractor else extract_requirements(p)
+        except Exception as exc:  # noqa: BLE001 - one bad LLM call shouldn't sink the run
+            print(f"  extract failed for {p.company} ({exc}); using heuristic.")
+            reqs = extract_requirements(p)
         fit = analyze_fit(reqs, cand_skills)
         rows.append((p, reqs, fit))
     rows.sort(key=lambda r: r[2].fit_score, reverse=True)
@@ -104,7 +127,7 @@ def cmd_pipeline(args) -> int:
             from src.apply.records import ApplicationRecord, ApplicationStore
             from src.tailor.build import build_materials, write_materials
 
-            materials = build_materials(candidate, p, reqs, fit)
+            materials = build_materials(candidate, p, reqs, fit, llm=llm)
             path = write_materials(materials, p, args.materials_dir)
             ApplicationStore(STORE_PATH).upsert(ApplicationRecord(
                 key=p.dedupe_key(), company=p.company, title=p.title,
@@ -192,6 +215,8 @@ def main(argv: list[str] | None = None) -> int:
             sp.add_argument("--tailor", action="store_true",
                             help="write DRAFT tailored materials for apply/stretch roles")
             sp.add_argument("--materials-dir", default="materials")
+            sp.add_argument("--llm", action="store_true",
+                            help="use Bedrock for extraction + cover letter (needs AWS creds)")
 
     rv = sub.add_parser("review")
     rv.add_argument("--store", default=str(STORE_PATH))

@@ -46,6 +46,31 @@ nothing**: ATS postings become a one-click package (markdown + apply URL) under
 `packages/`; `email:` postings become an `.eml` draft you send yourself unless
 you wire a real mailer. State lives in `applications/` (gitignored).
 
+## Optional: the LLM path (Bedrock)
+
+The pipeline runs fully on the offline heuristic. To use Bedrock (Amazon Nova
+Lite by default) for richer extraction + a written cover letter:
+
+```bash
+# needs real AWS creds for account my2027 (668449743071), region us-east-1,
+# with Bedrock model access enabled for the model id below
+export JOBPILOT_BEDROCK_MODEL=amazon.nova-lite-v1:0   # optional override
+python run.py pipeline --tailor --llm \
+  --profile config/search_profile.yaml --candidate config/candidate.yaml
+```
+
+If AWS creds/network aren't available, `--llm` prints a notice and falls back to
+the heuristic. Live-verify the model call once on your machine:
+
+```bash
+python -c "from src.llm.bedrock import BedrockLLM; print(BedrockLLM().converse('Reply OK.','ping'))"
+```
+
+Guardrail: the LLM extractor keeps a skill only if the model returns a verbatim
+JD quote for it that actually appears in the posting — hallucinated skills are
+dropped. The cover letter is grounded in your real profile facts, and the
+human-approval gate is still the backstop.
+
 ## Running behind a VPN / corporate proxy
 
 A plain VPN is transparent routing — no config needed. Two things to know:
