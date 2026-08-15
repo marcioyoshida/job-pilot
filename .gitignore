@@ -1,0 +1,19 @@
+# secrets & local state — NEVER commit
+.env
+.env.*
+*.pem
+config/search_profile.yaml
+.jobpilot/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# candidate PII / generated materials
+data/
+materials/
+*.resume.json

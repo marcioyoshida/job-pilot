@@ -1,0 +1,31 @@
+# job-pilot search profile (Phase P). Copy to config/search_profile.yaml and edit.
+# Drives Stage 1 gathering (FR-1.2). Credentials NEVER go here — env/secret only.
+
+titles:
+  - "Staff Software Engineer"
+  - "Senior Backend Engineer"
+keywords:
+  - "python"
+  - "aws"
+seniority:
+  - "senior"
+  - "staff"
+locations:
+  - "Remote"
+  - "São Paulo"
+remote_ok: true
+industries:
+  - "fintech"
+exclude_terms:
+  - "unpaid"
+exclude_companies: []
+recency_days: 14
+
+# Phase P only — the owner's OWN LinkedIn accounts (see CON-1 / CLAUDE.md).
+# `label` selects which env credentials to use, e.g. LINKEDIN_ACCT1_USER /
+# LINKEDIN_ACCT1_PASS. `saved_search` names a filter set to run.
+linkedin_accounts:
+  - label: "acct1"
+    saved_search: "backend-remote-latam"
+  - label: "acct2"
+    saved_search: "staff-fintech"
