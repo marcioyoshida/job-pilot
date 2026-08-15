@@ -1,18 +1,29 @@
 # Getting started (Phase P, local)
 
+### Set up the environment
+
+**With uv (recommended — reproducible via `uv.lock`):**
+
+```bash
+uv sync                      # creates .venv and installs deps (incl. boto3)
+uv run pytest -q             # run the tests
+uv run python run.py gather --profile config/search_profile.yaml
+```
+
+**With a plain venv + pip:**
+
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
-
-# configure your search
-cp config/search_profile.example.yaml config/search_profile.yaml
-$EDITOR config/search_profile.yaml
-
-# run tests (diff, taxonomy, fit are already real)
 pytest -q
-
-# see the CLI shape (no sources wired until Phase P0/P1)
 python run.py gather --profile config/search_profile.yaml
+```
+
+### Configure your search
+
+```bash
+cp config/search_profile.example.yaml config/search_profile.yaml && $EDITOR config/search_profile.yaml
+cp config/candidate.example.yaml       config/candidate.yaml       && $EDITOR config/candidate.yaml
 ```
 
 ## Secrets — never commit
@@ -60,10 +71,10 @@ python run.py pipeline --tailor --llm \
 ```
 
 If AWS creds/network aren't available, `--llm` prints a notice and falls back to
-the heuristic. Live-verify the model call once on your machine:
+the heuristic. Live-verify the whole AWS + Bedrock path once on your machine:
 
 ```bash
-python -c "from src.llm.bedrock import BedrockLLM; print(BedrockLLM().converse('Reply OK.','ping'))"
+uv run python scripts/live_check.py     # STS identity + a tiny Bedrock Converse call
 ```
 
 Guardrail: the LLM extractor keeps a skill only if the model returns a verbatim
