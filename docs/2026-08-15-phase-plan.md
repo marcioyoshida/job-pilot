@@ -24,8 +24,15 @@ Goal: a working single-user tool for the owner's own job search.
   `JobSource`: session-based, 2 accounts from config, saved-search filters,
   human-paced (jitter + hard daily cap). Credentials from env/secret only.
   See CON-1 — accept the account risk knowingly.
-- **P2 — extract + match.** `Requirements` extraction (Bedrock cheap model,
-  evidence spans) + taxonomy normalization + `FitAnalysis`.
+- **P2 — extract + match (DONE 2026-08-15).** `HeuristicExtractor`
+  (`src/extract/requirements.py`): deterministic, offline JD→`Requirements` —
+  taxonomy skill scan with must/nice split + evidence spans, years/education/
+  work-auth(+hard)/seniority/remote. No fabrication (only reports what's in the
+  JD). `BedrockExtractor` left as a guarded LLM seam (Phase P2-LLM).
+  `CandidateProfile` (`src/profile/candidate.py`) + `config/candidate.example.
+  yaml` feed `analyze_fit`. `run.py pipeline` runs gather→extract→match ranked
+  by fit. Tests: `tests/test_extract.py`, `tests/test_pipeline_integration.py`
+  (28 total green).
 - **P3 — tailor.** Structured master resume → tailored highlights + cover letter
   + drafted screening answers. Draft-only; no fabrication.
 - **P4 — approval + submit.** Review queue (approval gate) → email / one-click
@@ -46,7 +53,9 @@ Goal: a working single-user tool for the owner's own job search.
 
 ## First thing next session
 
-P0 is done (Greenhouse + Lever). Next: either **live-verify** the two sources on
-an open network (adjust mappings if the real schemas differ), or start **P1**
-(own-account LinkedIn), or **P2** (extraction/matching over what's gathered).
-Tests cover diff, taxonomy, fit, and both source mappings/filters.
+P0 + P2 are done. Next: **P3 — tailoring** (structured master resume →
+provenance-checked highlights + cover letter + drafted screening answers,
+draft-only), or **P1 — own-account LinkedIn**, or the **P2-LLM** upgrade
+(BedrockExtractor for higher recall on responsibilities/comp/certs). Tests cover
+diff, taxonomy, fit, both source mappings/filters, heuristic extraction, and the
+offline end-to-end chain.

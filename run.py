@@ -63,9 +63,41 @@ def cmd_gather(args) -> int:
 
 
 def cmd_pipeline(args) -> int:
-    print("pipeline: gather -> extract -> match -> tailor -> [approval] -> submit -> monitor")
-    print("Only `gather` is wired end-to-end so far (see docs/2026-08-15-phase-plan.md).")
-    return cmd_gather(args)
+    """gather -> extract -> match, ranked by fit for a candidate profile."""
+    from src.diff.engine import new_postings
+    from src.extract.requirements import extract_requirements
+    from src.match.fit import analyze_fit
+    from src.profile.candidate import CandidateProfile
+    from src.state.store import JsonState
+
+    profile = _load_profile(args.profile)
+    candidate = CandidateProfile.from_yaml(args.candidate)
+    cand_skills = candidate.normalized_skills()
+    state = JsonState(STATE_PATH)
+    sources = _sources(profile)
+    if not sources:
+        print("No sources wired yet — implement one in src/ingest/ (Phase P0/P1).")
+        return 0
+
+    collected = []
+    for s in sources:
+        collected.extend(s.fetch(profile))
+    fresh = new_postings(collected, state)
+
+    rows = []
+    for p in fresh:
+        reqs = extract_requirements(p)
+        fit = analyze_fit(reqs, cand_skills)
+        rows.append((p, fit))
+    rows.sort(key=lambda r: r[1].fit_score, reverse=True)
+
+    print(f"{len(rows)} new posting(s), ranked by fit (score is ESTIMATED):\n")
+    for p, fit in rows:
+        gaps = ", ".join(fit.gaps[:6]) or "none"
+        print(f"  {fit.fit_score:>5.0%}  [{fit.recommendation:<7}] {p.company} — {p.title}")
+        print(f"         gaps: {gaps}")
+        print(f"         {p.source_url}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -74,6 +106,8 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("gather", "pipeline"):
         sp = sub.add_parser(name)
         sp.add_argument("--profile", default="config/search_profile.yaml")
+        if name == "pipeline":
+            sp.add_argument("--candidate", default="config/candidate.yaml")
     args = parser.parse_args(argv)
     return {"gather": cmd_gather, "pipeline": cmd_pipeline}[args.cmd](args)
 

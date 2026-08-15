@@ -1,0 +1,33 @@
+# job-pilot candidate profile. Copy to config/candidate.yaml and edit.
+# This holds PII-ish career data — config/candidate.yaml is gitignored.
+#
+# `skills` drives Stage 3 fit scoring. `master_bullets` is the superset of real
+# resume bullets; Stage 4 (tailoring) selects from these and every tailored
+# highlight must map back to a bullet id here (no fabrication).
+
+name: "Your Name"
+headline: "Staff Software Engineer"
+
+skills:
+  - Python
+  - AWS
+  - Lambda
+  - DynamoDB
+  - Terraform
+  - PostgreSQL
+  - Docker
+
+master_bullets:
+  - id: "b1"
+    text: "Built a serverless data pipeline on AWS (Lambda, Step Functions, S3) processing 10M events/day."
+    skills: [python, aws, lambda, s3]
+  - id: "b2"
+    text: "Led migration of a monolith to containerized services on Kubernetes, cutting deploy time 60%."
+    skills: [docker, kubernetes]
+  - id: "b3"
+    text: "Designed PostgreSQL schemas and query tuning for a fintech ledger handling BRL settlements."
+    skills: [postgres, sql]
+
+prefs:
+  min_comp: null
+  remote_only: true

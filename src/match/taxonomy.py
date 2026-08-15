@@ -62,3 +62,20 @@ def normalize_skills(raw_skills: list[str]) -> list[str]:
 
 def family_of(canonical: str) -> str:
     return FAMILY.get(canonical, "other")
+
+
+# Bare canonical tokens too ambiguous to match as plain words in prose
+# (e.g. "go" the verb). They are still detected via longer synonyms ("golang").
+_AMBIGUOUS_BARE = {"go"}
+
+
+def recognizable_tokens() -> dict[str, str]:
+    """All raw tokens a scanner can look for -> canonical form.
+
+    Union of canonical names and their synonyms, minus ambiguous bare tokens.
+    """
+    tokens: dict[str, str] = {c: c for c in FAMILY}
+    tokens.update(SYNONYMS)
+    for t in _AMBIGUOUS_BARE:
+        tokens.pop(t, None)
+    return tokens
