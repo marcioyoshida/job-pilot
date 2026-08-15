@@ -19,11 +19,21 @@ STATE_PATH = Path(".jobpilot/state.json")
 STORE_PATH = Path("applications/records.json")
 
 
+def _require_config(path: str) -> Path:
+    """Return the config path, or exit with a friendly copy-the-example hint."""
+    p = Path(path)
+    if p.exists():
+        return p
+    example = p.with_name(p.stem + ".example" + p.suffix)
+    hint = f"cp {example} {p}   # then edit it" if example.exists() else f"create {p}"
+    raise SystemExit(f"Config not found: {p}\n  → {hint}")
+
+
 def _load_profile(path: str):
     import yaml  # local import so --help works without deps installed
     from src.ingest.base import SearchProfile
 
-    data = yaml.safe_load(Path(path).read_text())
+    data = yaml.safe_load(_require_config(path).read_text())
     return SearchProfile.from_dict(data or {})
 
 
@@ -87,7 +97,7 @@ def cmd_pipeline(args) -> int:
     import os
 
     profile = _load_profile(args.profile)
-    candidate = CandidateProfile.from_yaml(args.candidate)
+    candidate = CandidateProfile.from_yaml(_require_config(args.candidate))
     cand_skills = candidate.normalized_skills()
     state = JsonState(STATE_PATH)
     sources = _sources(profile, _linkedin_inbox(args))
