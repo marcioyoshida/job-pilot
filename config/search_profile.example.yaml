@@ -21,6 +21,12 @@ exclude_terms:
 exclude_companies: []
 recency_days: 14
 
+# Greenhouse public job boards to poll (Phase P0, ToS-clean). Values are the
+# board tokens from a company's boards.greenhouse.io/<token> URL.
+greenhouse_boards:
+  - "gitlab"
+  - "coinbase"
+
 # Phase P only — the owner's OWN LinkedIn accounts (see CON-1 / CLAUDE.md).
 # `label` selects which env credentials to use, e.g. LINKEDIN_ACCT1_USER /
 # LINKEDIN_ACCT1_PASS. `saved_search` names a filter set to run.

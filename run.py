@@ -28,8 +28,11 @@ def _load_profile(path: str):
 
 def _sources(profile):
     """Build the enabled JobSource list. Wire real sources as they land."""
+    from src.ingest.greenhouse import GreenhouseSource
+
     sources = []
-    # Phase P0: sources.append(GreenhouseSource(boards=[...]))
+    if profile.greenhouse_boards:
+        sources.append(GreenhouseSource(boards=profile.greenhouse_boards))
     # Phase P1: for acct in profile.linkedin_accounts:
     #               sources.append(LinkedInSource(acct["label"]))
     return sources

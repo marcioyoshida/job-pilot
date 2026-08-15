@@ -9,9 +9,14 @@ fit). External I/O (LinkedIn, ATS APIs, Bedrock, email) is stubbed with clear
 
 Goal: a working single-user tool for the owner's own job search.
 
-- **P0 — spine (next).** `SearchProfile` config + `JobSource` interface + diff
-  engine + `JsonState`. Wire `run.py` to gather from **one ATS source**
-  (Greenhouse or Lever — ToS-clean) end-to-end into deduped, new-only postings.
+- **P0 — spine (DONE 2026-08-15).** `SearchProfile` config + `JobSource`
+  interface + diff engine + `JsonState`, plus a working **Greenhouse** source
+  (`src/ingest/greenhouse.py`): public boards API → `Posting`, HTML→text JD, a
+  pure `matches()` filter, injectable HTTP for tests. Wired into `run.py gather`
+  end-to-end into deduped, new-only postings. Tests: `tests/test_greenhouse.py`
+  (16 total green). **Live-verify pending:** this build's egress policy blocks
+  `boards-api.greenhouse.io`, so run `python -m src.ingest.greenhouse gitlab` on
+  an unrestricted network once to confirm the schema (house rule).
 - **P1 — LinkedIn (own accounts).** Implement `src/ingest/linkedin.py` behind
   `JobSource`: session-based, 2 accounts from config, saved-search filters,
   human-paced (jitter + hard daily cap). Credentials from env/secret only.
@@ -38,6 +43,7 @@ Goal: a working single-user tool for the owner's own job search.
 
 ## First thing next session
 
-Implement P0: make `python run.py gather` pull from one ATS source into
-new-only postings using `src/diff/engine.py` + `JsonState`, with a
-`config/search_profile.yaml`. Tests already cover diff, taxonomy, and fit.
+P0 is done. Next: either **live-verify Greenhouse** (run the one-liner above on
+an open network, adjust the mapping if the real schema differs) + add the
+**Lever** source the same way, or start **P1** (own-account LinkedIn). Tests
+cover diff, taxonomy, fit, and the Greenhouse mapping/filtering.

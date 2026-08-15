@@ -123,6 +123,8 @@ class SearchProfile:
     exclude_terms: list[str] = field(default_factory=list)
     exclude_companies: list[str] = field(default_factory=list)
     recency_days: int = 14
+    # Greenhouse board tokens to poll (e.g. "gitlab", "coinbase") — Phase P0
+    greenhouse_boards: list[str] = field(default_factory=list)
     # LinkedIn: per-account saved-search filter names/urls (Phase P only)
     linkedin_accounts: list[dict[str, Any]] = field(default_factory=list)
 
