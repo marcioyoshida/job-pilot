@@ -203,6 +203,55 @@ def cmd_submit(args) -> int:
     return 0
 
 
+def cmd_monitor(args) -> int:
+    """Update application statuses from the inbox (FR-6.2)."""
+    from src.apply.records import ApplicationStore
+    from src.monitor.tracker import monitor_messages
+
+    store = ApplicationStore(args.store)
+    if not store.all():
+        print("No applications to monitor. Run the apply loop first.")
+        return 0
+
+    if args.inbox:
+        from src.monitor.inbox import FileInbox
+        messages = list(FileInbox(args.inbox).fetch())
+    elif args.gmail:
+        from src.monitor.inbox import GmailImapInbox
+        messages = list(GmailImapInbox(limit=args.limit).fetch())
+    else:
+        print("Choose an inbox: --inbox <file.json> or --gmail "
+              "(needs GMAIL_ADDRESS + GMAIL_APP_PASSWORD).")
+        return 1
+
+    def _notify(label: str, status: str) -> None:
+        print(f"  🔔 {status.upper()}: {label}")
+
+    transitions = monitor_messages(messages, store, notify=_notify)
+    print(f"scanned {len(messages)} message(s); {len(transitions)} status change(s):")
+    for _key, label, status in transitions:
+        print(f"  {label} -> {status}")
+    return 0
+
+
+def cmd_status(args) -> int:
+    """Manually override an application's status (FR-6.2 manual override)."""
+    from src.apply.records import ApplicationStore
+    from src.monitor.tracker import STATUSES
+
+    if args.set not in STATUSES:
+        print(f"unknown status '{args.set}'. One of: {', '.join(STATUSES)}")
+        return 1
+    store = ApplicationStore(args.store)
+    if not store.get(args.key):
+        print(f"no application with key {args.key} (see `review`).")
+        return 1
+    store.advance_status(args.key, args.set, source="manual",
+                         detail="manual override", forward_only=False)
+    print(f"{args.key} -> {args.set}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="job-pilot")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -231,9 +280,22 @@ def main(argv: list[str] | None = None) -> int:
     sb.add_argument("--store", default=str(STORE_PATH))
     sb.add_argument("--package-dir", default="packages")
 
+    mon = sub.add_parser("monitor")
+    mon.add_argument("--store", default=str(STORE_PATH))
+    mon.add_argument("--inbox", help="path to a JSON file of messages")
+    mon.add_argument("--gmail", action="store_true",
+                     help="read recent Gmail over IMAP (GMAIL_ADDRESS + GMAIL_APP_PASSWORD)")
+    mon.add_argument("--limit", type=int, default=50)
+
+    st = sub.add_parser("status")
+    st.add_argument("--store", default=str(STORE_PATH))
+    st.add_argument("--key", required=True)
+    st.add_argument("--set", required=True, help="new lifecycle status")
+
     args = parser.parse_args(argv)
     handlers = {"gather": cmd_gather, "pipeline": cmd_pipeline,
-                "review": cmd_review, "approve": cmd_approve, "submit": cmd_submit}
+                "review": cmd_review, "approve": cmd_approve, "submit": cmd_submit,
+                "monitor": cmd_monitor, "status": cmd_status}
     return handlers[args.cmd](args)
 
 

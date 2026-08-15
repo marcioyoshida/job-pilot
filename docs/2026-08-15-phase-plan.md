@@ -52,8 +52,16 @@ Goal: a working single-user tool for the owner's own job search.
   mailer that defaults to writing an `.eml` draft and sends nothing. Receipts
   carry a materials fingerprint. CLI: `run.py review | approve | submit`.
   Tests: `tests/test_submit.py` (40 total green).
-- **P5 — monitor.** Status lifecycle + inbox parsing + manual override +
-  notifications.
+- **P5 — monitor (DONE 2026-08-15).** `src/monitor/tracker.py`:
+  `classify_inbox_message` (keyword buckets: acknowledged/screening/interview/
+  offer/rejected, rejection checked first), `match_to_application` (company
+  signal required, title as tie-breaker), `monitor_messages` orchestration.
+  Forward-only `advance_status` with per-record `history` in
+  `src/apply/records.py`. Inbox adapters (`src/monitor/inbox.py`): `FileInbox`
+  (JSON, local/testable) + `GmailImapInbox` (imaplib, env app-password,
+  injectable). CLI: `run.py monitor --inbox <file> | --gmail` (notifies on
+  interview/offer/rejected) and `run.py status --key --set` (manual override).
+  Tests: `tests/test_monitor.py` (51 total green).
 - **P6 — serverless.** Port pure functions to Lambda (DynamoDbState), Step
   Functions orchestration, EventBridge schedule, S3 materials — same account
   `my2027`, ~$100/mo ceiling.
@@ -80,9 +88,11 @@ Goal: a working single-user tool for the owner's own job search.
 
 ## First thing next session
 
-P0 + P2 + P3 + P4 are done — gather→extract→match→tailor→(approve)→submit runs
-offline end-to-end, with the human-approval gate enforced. Next: **P5 — monitor**
-(status lifecycle already scaffolded in `src/monitor/tracker.py`; wire inbox
-parsing via the connected Gmail + manual override + notifications), or **P1 —
-own-account LinkedIn**, or the **LLM upgrade** (BedrockExtractor + cover-letter
-prose). Tests cover every built stage plus the offline end-to-end chain.
+P0 + P2 + P3 + P4 + P5 + the LLM upgrade are done — **all six stages** run
+(gather→extract→match→tailor→approve→submit→monitor), with the human-approval
+gate enforced and the Bedrock path live-verified on the owner's machine
+(nova-lite, us-east-1). 51 tests green. Remaining Phase-P options: **P1 —
+own-account LinkedIn** (the last source; ToS/account-risk work), **P6 —
+serverless** (port to Lambda/Step Functions/DynamoDB on my2027), or polish
+(more ATS sources like Ashby; richer notifications/digest). Tests cover every
+built stage plus the offline end-to-end chain.

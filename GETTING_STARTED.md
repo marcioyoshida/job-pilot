@@ -52,6 +52,24 @@ nothing**: ATS postings become a one-click package (markdown + apply URL) under
 `packages/`; `email:` postings become an `.eml` draft you send yourself unless
 you wire a real mailer. State lives in `applications/` (gitignored).
 
+### 6: monitor progress
+
+```bash
+# from a JSON export of messages ([{subject, body, from, date, id}, ...])
+python run.py monitor --inbox inbox.json
+
+# or read recent Gmail over IMAP (create an app password at myaccount.google.com)
+export GMAIL_ADDRESS=you@gmail.com GMAIL_APP_PASSWORD=xxxx
+python run.py monitor --gmail
+
+python run.py status --key <key> --set interview     # manual override
+```
+
+`monitor` classifies each email (acknowledged/screening/interview/offer/
+rejected), matches it to an application (a company signal is required — it won't
+guess), advances the status **forward-only**, and notifies on interview/offer/
+rejection. Every change is logged to the record's history.
+
 ## Optional: the LLM path (Bedrock)
 
 The pipeline runs fully on the offline heuristic. To use Bedrock (Amazon Nova

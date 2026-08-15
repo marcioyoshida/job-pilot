@@ -29,6 +29,7 @@ class ApplicationRecord:
     status: str = "drafted"               # drafted -> approved -> submitted (+ monitor statuses)
     approved_at: Optional[str] = None
     receipt: Optional[dict[str, Any]] = None
+    history: list[dict[str, Any]] = field(default_factory=list)   # status events (Stage 6)
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
 
@@ -84,6 +85,22 @@ class ApplicationStore:
         r.approved_at = _now()
         r.updated_at = _now()
         self._flush()
+
+    def advance_status(self, key: str, status: str, *, source: str = "monitor",
+                       detail: str = "", forward_only: bool = True) -> bool:
+        """Move a record to `status`, logging an event. Forward-only by default
+        (never regress along the lifecycle). Returns True if the status changed."""
+        from src.monitor.tracker import STATUSES
+
+        r = self._records[key]
+        if forward_only and status in STATUSES and r.status in STATUSES:
+            if STATUSES.index(status) <= STATUSES.index(r.status):
+                return False
+        r.history.append({"status": status, "at": _now(), "source": source, "detail": detail})
+        r.status = status
+        r.updated_at = _now()
+        self._flush()
+        return True
 
     def set_receipt(self, key: str, receipt: dict[str, Any]) -> None:
         r = self._records[key]
