@@ -14,6 +14,9 @@ from __future__ import annotations
 import os
 import sys
 
+# Make `src` importable no matter the cwd (scripts/ is on sys.path, repo root isn't).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 EXPECTED_ACCOUNT = "668449743071"  # my2027
 
 
