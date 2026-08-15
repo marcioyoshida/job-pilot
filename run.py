@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 STATE_PATH = Path(".jobpilot/state.json")
+STORE_PATH = Path("applications/records.json")
 
 
 def _load_profile(path: str):
@@ -100,20 +101,89 @@ def cmd_pipeline(args) -> int:
         print(f"         {p.source_url}")
         # Draft tailored materials for worth-applying roles (DRAFT — not submitted).
         if args.tailor and fit.recommendation in ("apply", "stretch"):
+            from src.apply.records import ApplicationRecord, ApplicationStore
             from src.tailor.build import build_materials, write_materials
 
             materials = build_materials(candidate, p, reqs, fit)
             path = write_materials(materials, p, args.materials_dir)
+            ApplicationStore(STORE_PATH).upsert(ApplicationRecord(
+                key=p.dedupe_key(), company=p.company, title=p.title,
+                source=p.source, source_url=p.source_url,
+                application_method=reqs.application_method,
+                materials_path=str(path), status="drafted",
+            ))
             print(f"         draft materials -> {path}  (PENDING YOUR APPROVAL)")
             made += 1
     if args.tailor:
-        print(f"\n{made} draft package(s) written. Review before any submission (Stage 5).")
+        print(f"\n{made} draft(s) written & registered. Next: "
+              f"`python run.py review` then `approve` then `submit`.")
+    return 0
+
+
+def cmd_review(args) -> int:
+    from src.apply.records import ApplicationStore
+
+    records = ApplicationStore(args.store).all()
+    if not records:
+        print("No applications yet. Run `pipeline --tailor` first.")
+        return 0
+    print(f"{len(records)} application(s):\n")
+    for r in records:
+        flag = {"drafted": "· needs approval", "approved": "✓ approved (unsubmitted)",
+                "submitted": "✔ submitted"}.get(r.status, r.status)
+        print(f"  [{r.status:<9}] {r.company} — {r.title}   {flag}")
+        print(f"       key={r.key}  {r.source_url}")
+        if r.receipt:
+            print(f"       receipt: {r.receipt.get('method')} -> {r.receipt.get('confirmation')}")
+    print("\nApprove with: python run.py approve --key <key> | --all")
+    return 0
+
+
+def cmd_approve(args) -> int:
+    from src.apply.records import ApplicationStore
+
+    store = ApplicationStore(args.store)
+    targets = store.all() if args.all else [r for r in store.all() if r.key == args.key]
+    if not targets:
+        print("No matching drafted application. Use `review` to list keys.")
+        return 1
+    n = 0
+    for r in targets:
+        if r.status == "drafted":
+            store.approve(r.key)
+            print(f"approved: {r.company} — {r.title}")
+            n += 1
+    print(f"\n{n} approved. Submit with: python run.py submit")
+    return 0
+
+
+def cmd_submit(args) -> int:
+    from src.apply.records import ApplicationStore
+    from src.submit.submitter import ApprovalRequired, submit_record
+
+    store = ApplicationStore(args.store)
+    approved = [r for r in store.all() if r.status == "approved"]
+    if not approved:
+        print("Nothing approved to submit. Run `approve` first (approval is required).")
+        return 0
+    print(f"Submitting {len(approved)} approved application(s)...\n")
+    for r in approved:
+        try:
+            receipt = submit_record(r, store, package_dir=args.package_dir)
+        except (ApprovalRequired, FileNotFoundError, RuntimeError) as exc:
+            print(f"  SKIP {r.company} — {r.title}: {exc}")
+            continue
+        print(f"  {receipt.method}: {r.company} — {r.title}")
+        print(f"       -> {receipt.confirmation}")
+    print("\nOne-click packages/email drafts are prepared for YOU to finish. "
+          "Nothing was auto-sent.")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="job-pilot")
     sub = parser.add_subparsers(dest="cmd", required=True)
+
     for name in ("gather", "pipeline"):
         sp = sub.add_parser(name)
         sp.add_argument("--profile", default="config/search_profile.yaml")
@@ -122,8 +192,24 @@ def main(argv: list[str] | None = None) -> int:
             sp.add_argument("--tailor", action="store_true",
                             help="write DRAFT tailored materials for apply/stretch roles")
             sp.add_argument("--materials-dir", default="materials")
+
+    rv = sub.add_parser("review")
+    rv.add_argument("--store", default=str(STORE_PATH))
+
+    ap = sub.add_parser("approve")
+    ap.add_argument("--store", default=str(STORE_PATH))
+    g = ap.add_mutually_exclusive_group(required=True)
+    g.add_argument("--key")
+    g.add_argument("--all", action="store_true")
+
+    sb = sub.add_parser("submit")
+    sb.add_argument("--store", default=str(STORE_PATH))
+    sb.add_argument("--package-dir", default="packages")
+
     args = parser.parse_args(argv)
-    return {"gather": cmd_gather, "pipeline": cmd_pipeline}[args.cmd](args)
+    handlers = {"gather": cmd_gather, "pipeline": cmd_pipeline,
+                "review": cmd_review, "approve": cmd_approve, "submit": cmd_submit}
+    return handlers[args.cmd](args)
 
 
 if __name__ == "__main__":

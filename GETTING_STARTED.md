@@ -29,6 +29,23 @@ export LINKEDIN_ACCT2_PASS=...
 `.gitignore` already excludes `.env`, `config/search_profile.yaml`, `.jobpilot/`,
 and any candidate data/materials.
 
+## The apply loop (Stages 1-5)
+
+```bash
+# 1-4: gather -> extract -> match -> tailor DRAFT materials for apply/stretch roles
+python run.py pipeline --tailor \
+  --profile config/search_profile.yaml --candidate config/candidate.yaml
+
+python run.py review                 # list applications + status
+python run.py approve --key <key>    # or --all  (approval is REQUIRED)
+python run.py submit                 # prepares one-click packages / email drafts
+```
+
+`submit` refuses anything not approved, is idempotent, and **auto-sends
+nothing**: ATS postings become a one-click package (markdown + apply URL) under
+`packages/`; `email:` postings become an `.eml` draft you send yourself unless
+you wire a real mailer. State lives in `applications/` (gitignored).
+
 ## Running behind a VPN / corporate proxy
 
 A plain VPN is transparent routing — no config needed. Two things to know:

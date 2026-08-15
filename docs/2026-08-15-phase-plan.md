@@ -43,8 +43,15 @@ Goal: a working single-user tool for the owner's own job search.
   `status=draft_pending_approval`). `run.py pipeline --tailor` produces drafts
   for apply/stretch roles. LLM prose left as guarded seams. Tests:
   `tests/test_tailor.py` (34 total green).
-- **P4 — approval + submit.** Review queue (approval gate) → email / one-click
-  package submission + receipts.
+- **P4 — approval + submit (DONE 2026-08-15).** `ApplicationRecord` +
+  `ApplicationStore` (`src/apply/records.py`) persist drafted→approved→submitted
+  under `applications/` (gitignored); re-drafts never downgrade progress.
+  `src/submit/submitter.py` enforces the approval gate + idempotency and
+  dispatches by `application_method`: ATS URL → one-click package (markdown +
+  apply URL, CON-3 no auto-form-fill); `email:<addr>` → email via an INJECTED
+  mailer that defaults to writing an `.eml` draft and sends nothing. Receipts
+  carry a materials fingerprint. CLI: `run.py review | approve | submit`.
+  Tests: `tests/test_submit.py` (40 total green).
 - **P5 — monitor.** Status lifecycle + inbox parsing + manual override +
   notifications.
 - **P6 — serverless.** Port pure functions to Lambda (DynamoDbState), Step
@@ -61,10 +68,9 @@ Goal: a working single-user tool for the owner's own job search.
 
 ## First thing next session
 
-P0 + P2 + P3 are done — gather→extract→match→tailor runs offline end-to-end.
-Next: **P4 — approval + submit** (review queue over the DRAFT materials, then
-email / one-click-package submission with idempotent receipts), or **P1 —
-own-account LinkedIn**, or the **LLM upgrade** (BedrockExtractor +
-LLM cover-letter prose). Tests cover diff, taxonomy, fit, both source
-mappings/filters, heuristic extraction, tailoring/provenance, and the offline
-end-to-end chain.
+P0 + P2 + P3 + P4 are done — gather→extract→match→tailor→(approve)→submit runs
+offline end-to-end, with the human-approval gate enforced. Next: **P5 — monitor**
+(status lifecycle already scaffolded in `src/monitor/tracker.py`; wire inbox
+parsing via the connected Gmail + manual override + notifications), or **P1 —
+own-account LinkedIn**, or the **LLM upgrade** (BedrockExtractor + cover-letter
+prose). Tests cover every built stage plus the offline end-to-end chain.
