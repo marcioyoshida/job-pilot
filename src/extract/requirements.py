@@ -156,25 +156,53 @@ class HeuristicExtractor:
 
 
 _LLM_SYSTEM = (
-    "You read a job description and list the technical skills it asks for. "
-    "Return ONLY a JSON object: "
+    "You read a job description and list only the CONCRETE technical skills it "
+    "asks for: programming languages, frameworks, libraries, databases, cloud "
+    "services, tools, and platforms — the kind of thing you'd put in a resume "
+    "skills section (e.g. python, kubernetes, postgres, react, kafka, "
+    "distributed systems). "
+    "Do NOT include responsibilities, job duties, soft skills, seniority, or "
+    "team/culture phrases (e.g. NOT 'backend engineering', 'globally distributed "
+    "teams', 'improving build systems', 'ownership', 'collaboration'). "
+    "Prefer 1-2 word names. Return ONLY a JSON object: "
     '{"must_have_skills": [...], "nice_to_have_skills": [...]}. '
-    "Use short skill names (e.g. \"python\", \"kubernetes\", \"postgres\", "
-    "\"distributed systems\"). must_have = required; nice_to_have = "
-    "preferred/bonus. No commentary, no other keys, and do not invent skills "
-    "that are not in the text."
+    "must_have = required; nice_to_have = preferred/bonus. No commentary, no "
+    "other keys, and do not invent skills that are not in the text."
 )
+
+# words that mark a phrase as a responsibility/soft-skill, not a listable tech
+_NON_SKILL_WORDS = {
+    "team", "teams", "culture", "stakeholder", "stakeholders", "mentoring",
+    "collaboration", "ownership", "responsibilities", "communication",
+    "leadership", "experience", "engineering", "duties", "mindset",
+}
+
+
+def _looks_like_skill(name: str) -> bool:
+    """Cheap guard against the model returning responsibility/culture phrases."""
+    words = name.split()
+    if len(words) > 3:
+        return False
+    if any(w in _NON_SKILL_WORDS for w in words):
+        return False
+    # a multi-word phrase led by a gerund is a responsibility ("improving build
+    # systems"), not a skill — unlike "machine learning" / "distributed systems"
+    if len(words) > 1 and words[0].endswith("ing") and len(words[0]) > 4:
+        return False
+    return True
 
 
 def _ground_skills(names, jd: str, jd_low: str) -> tuple[list[str], dict[str, str]]:
-    """Keep only model-returned skills that actually appear in the JD (word
-    boundary), normalize them, and record a JD snippet as evidence. This is the
-    anti-fabrication guard: a hallucinated skill has no JD match and is dropped."""
+    """Keep only model-returned skills that (a) look like a concrete skill and
+    (b) actually appear in the JD (word boundary); normalize + record a JD
+    snippet as evidence. The JD-match is the anti-fabrication guard; the
+    look-like-a-skill filter drops responsibility/culture phrases the model
+    sometimes returns."""
     kept: list[str] = []
     ev: dict[str, str] = {}
     for name in names or []:
         n = str(name).strip().lower()
-        if not n:
+        if not n or not _looks_like_skill(n):
             continue
         m = re.search(r"\b" + re.escape(n) + r"\b", jd_low)
         if not m:

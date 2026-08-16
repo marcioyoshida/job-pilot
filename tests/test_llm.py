@@ -60,6 +60,24 @@ def test_llm_extractor_drops_fabricated_skills():
         assert s in reqs.evidence                        # grounded evidence present
 
 
+def test_llm_extractor_filters_responsibility_phrases():
+    jd = ("We build with Python and Kafka. You will work in globally distributed "
+          "teams on backend engineering and improving build systems.")
+    reply = json.dumps({
+        "must_have_skills": ["Python", "Kafka", "globally distributed teams",
+                             "backend engineering", "improving build systems"],
+        "nice_to_have_skills": [],
+    })
+    reqs = BedrockExtractor(BedrockLLM(client=FakeBedrockClient(reply))).extract(
+        _posting(jd))
+    assert "python" in reqs.must_have_skills
+    assert "kafka" in reqs.must_have_skills
+    # responsibility/culture phrases dropped even though they appear in the JD
+    for noise in ("globally distributed teams", "backend engineering",
+                  "improving build systems"):
+        assert noise not in reqs.must_have_skills
+
+
 def test_llm_extractor_keeps_deterministic_fields_from_heuristic():
     jd = "Requirements: Python. Must be authorized to work in the US. Bachelor's degree."
     reply = json.dumps({"must_have_skills": ["Python"], "nice_to_have_skills": []})
