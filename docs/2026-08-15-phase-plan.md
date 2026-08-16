@@ -69,9 +69,16 @@ Goal: a working single-user tool for the owner's own job search.
   injectable). CLI: `run.py monitor --inbox <file> | --gmail` (notifies on
   interview/offer/rejected) and `run.py status --key --set` (manual override).
   Tests: `tests/test_monitor.py` (51 total green).
-- **P6 — serverless.** Port pure functions to Lambda (DynamoDbState), Step
-  Functions orchestration, EventBridge schedule, S3 materials — same account
-  `my2027`, ~$100/mo ceiling.
+- **P6 — serverless (code done 2026-08-16; deploy pending on owner's machine).**
+  `DynamoDbState` implemented (single-table seen-set + kv, injectable, tested).
+  `src/aws/handler.py`: `run_pipeline` core (injectable state/sources/extractor/
+  object-writer/LLM → writes `materials/<run>/…` + `feed/<run>.json` +
+  `feed/latest.json` to S3; diff-aware; never submits) with `pipeline_handler`
+  wiring S3/DynamoDB/Bedrock. CDK stack `infra/app.py` (DynamoDB on-demand, S3,
+  Python Lambda, daily EventBridge rule, IAM for Bedrock/Dynamo/S3/Secrets) +
+  `infra/requirements.txt`. Runbook: `docs/2026-08-16-phase6-serverless.md`.
+  Tests: `tests/test_aws.py` (62 total green). Not `cdk synth`'d in-sandbox
+  (no creds/Docker) — first synth/deploy happens on the owner's machine.
 
 - **LLM upgrade (DONE 2026-08-15).** `src/llm/bedrock.py` — injectable
   `BedrockLLM` over the Converse API (nova-lite default, model/region from env,

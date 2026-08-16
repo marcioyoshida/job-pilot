@@ -55,23 +55,40 @@ class JsonState:
 
 
 class DynamoDbState:
-    """Lambda state. Implement in Phase P6 (mirror Onça's sharded seen-set).
+    """State backed by a single DynamoDB table (Phase P6 / Lambda).
 
-    Kept as a seam so the pipeline can move to AWS without touching stage logic.
+    Single-table design keyed by a partition key `pk`:
+      - seen-set:  pk = "seen#<key>"     (presence == seen)
+      - kv store:  pk = "kv#<name>"      (attribute `value`)
+
+    One item per seen key — no single hot item to grow past the 400KB limit or
+    serialize writes against (the failure Onça hit with a monolithic seen-set).
+    On-demand billing means idle cost is ~zero. The boto3 Table resource is
+    injectable so tests use an in-memory fake and never touch AWS.
     """
 
-    def __init__(self, table_name: str, shard_count: int = 8) -> None:
-        self.table_name = table_name
-        self.shard_count = shard_count
+    def __init__(self, table_name: str | None = None, *, table: object | None = None) -> None:
+        import os
 
-    def seen(self, key: str) -> bool:  # pragma: no cover - AWS seam
-        raise NotImplementedError("Phase P6: wire DynamoDB seen-set (sharded).")
+        self.table_name = table_name or os.environ.get("JOBPILOT_TABLE", "job-pilot")
+        self._table = table
 
-    def mark_seen(self, key: str) -> None:  # pragma: no cover - AWS seam
-        raise NotImplementedError("Phase P6: wire DynamoDB seen-set (sharded).")
+    @property
+    def table(self):
+        if self._table is None:  # pragma: no cover - needs boto3 + AWS
+            import boto3
+            self._table = boto3.resource("dynamodb").Table(self.table_name)
+        return self._table
 
-    def get(self, key: str) -> str | None:  # pragma: no cover - AWS seam
-        raise NotImplementedError("Phase P6: wire DynamoDB kv.")
+    def seen(self, key: str) -> bool:
+        return "Item" in self.table.get_item(Key={"pk": f"seen#{key}"})
 
-    def put(self, key: str, value: str) -> None:  # pragma: no cover - AWS seam
-        raise NotImplementedError("Phase P6: wire DynamoDB kv.")
+    def mark_seen(self, key: str) -> None:
+        self.table.put_item(Item={"pk": f"seen#{key}"})
+
+    def get(self, key: str) -> str | None:
+        item = self.table.get_item(Key={"pk": f"kv#{key}"}).get("Item")
+        return item.get("value") if item else None
+
+    def put(self, key: str, value: str) -> None:
+        self.table.put_item(Item={"pk": f"kv#{key}", "value": value})
