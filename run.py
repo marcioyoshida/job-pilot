@@ -88,7 +88,7 @@ def cmd_gather(args) -> int:
               "profile, or pass --linkedin-inbox/--linkedin-gmail.")
         return 0
 
-    fresh = new_postings(_collect(sources, profile), state)
+    fresh = new_postings(_collect(sources, profile), state, ignore_seen=getattr(args, "all", False))
     print(f"{len(fresh)} new posting(s) since last run:")
     for p in fresh:
         print(f"  [{p.source}] {p.company} — {p.title}  {p.source_url}")
@@ -132,7 +132,7 @@ def cmd_pipeline(args) -> int:
             print(f"LLM unavailable ({exc}); falling back to heuristic.\n")
             use_llm, llm, extractor = False, None, None
 
-    fresh = new_postings(_collect(sources, profile), state)
+    fresh = new_postings(_collect(sources, profile), state, ignore_seen=getattr(args, "all", False))
 
     rows = []
     for p in fresh:
@@ -294,6 +294,9 @@ def main(argv: list[str] | None = None) -> int:
         sp.add_argument("--linkedin-gmail", action="store_true",
                         help="read LinkedIn job-alert emails from Gmail (IMAP) as a source")
         sp.add_argument("--limit", type=int, default=50)
+        sp.add_argument("--all", action="store_true",
+                        help="reprocess every fetched posting, ignoring the seen-set "
+                             "(does not update it)")
         if name == "pipeline":
             sp.add_argument("--candidate", default="config/candidate.yaml")
             sp.add_argument("--tailor", action="store_true",

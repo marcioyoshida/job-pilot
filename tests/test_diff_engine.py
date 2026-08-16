@@ -34,3 +34,15 @@ def test_no_mark_leaves_state_clean(tmp_path):
     new_postings([_p("Acme", "Engineer", "u1")], JsonState(path), mark=False)
     again = new_postings([_p("Acme", "Engineer", "u1")], JsonState(path))
     assert len(again) == 1
+
+
+def test_ignore_seen_reprocesses_without_touching_state(tmp_path):
+    path = tmp_path / "s.json"
+    # first run marks it seen
+    new_postings([_p("Acme", "Engineer", "u1")], JsonState(path))
+    # ignore_seen returns it again AND still dedupes within the batch
+    got = new_postings([_p("Acme", "Engineer", "u1"), _p("Acme", "Engineer", "u2")],
+                       JsonState(path), ignore_seen=True)
+    assert len(got) == 1
+    # state was not modified: a normal run still treats it as already seen
+    assert new_postings([_p("Acme", "Engineer", "u1")], JsonState(path)) == []
