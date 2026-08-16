@@ -48,6 +48,18 @@ def _linkedin_inbox(args):
     return None
 
 
+def _collect(sources, profile):
+    """Fetch from every source, isolating failures so one bad source (bad token,
+    Gmail auth, network) never sinks the whole run."""
+    collected = []
+    for s in sources:
+        try:
+            collected.extend(s.fetch(profile))
+        except Exception as exc:  # noqa: BLE001
+            print(f"  source '{getattr(s, 'name', '?')}' failed: {exc}")
+    return collected
+
+
 def _sources(profile, linkedin_inbox=None):
     """Build the enabled JobSource list. Wire real sources as they land."""
     from src.ingest.greenhouse import GreenhouseSource
@@ -76,10 +88,7 @@ def cmd_gather(args) -> int:
               "profile, or pass --linkedin-inbox/--linkedin-gmail.")
         return 0
 
-    collected = []
-    for s in sources:
-        collected.extend(s.fetch(profile))
-    fresh = new_postings(collected, state)
+    fresh = new_postings(_collect(sources, profile), state)
     print(f"{len(fresh)} new posting(s) since last run:")
     for p in fresh:
         print(f"  [{p.source}] {p.company} — {p.title}  {p.source_url}")
@@ -123,10 +132,7 @@ def cmd_pipeline(args) -> int:
             print(f"LLM unavailable ({exc}); falling back to heuristic.\n")
             use_llm, llm, extractor = False, None, None
 
-    collected = []
-    for s in sources:
-        collected.extend(s.fetch(profile))
-    fresh = new_postings(collected, state)
+    fresh = new_postings(_collect(sources, profile), state)
 
     rows = []
     for p in fresh:

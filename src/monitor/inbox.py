@@ -80,7 +80,16 @@ class GmailImapInbox(InboxSource):
         if not self.address or not self._password:
             raise RuntimeError("set GMAIL_ADDRESS and GMAIL_APP_PASSWORD in the environment")
         imap = imaplib.IMAP4_SSL("imap.gmail.com")
-        imap.login(self.address, self._password)
+        try:
+            imap.login(self.address, self._password)
+        except imaplib.IMAP4.error as exc:
+            raise RuntimeError(
+                "Gmail IMAP login failed — use a Google APP PASSWORD, not your normal "
+                "password (enable 2-Step Verification, then create one at "
+                "https://myaccount.google.com/apppasswords), and make sure IMAP is on in "
+                "Gmail settings. Set GMAIL_ADDRESS + GMAIL_APP_PASSWORD. Detail: "
+                f"{exc}"
+            ) from exc
         return imap
 
     def fetch(self) -> Iterable[InboxMessage]:
