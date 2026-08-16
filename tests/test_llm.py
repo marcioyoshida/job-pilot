@@ -35,50 +35,39 @@ def test_extract_json_tolerates_fenced_output():
     assert extract_json('```json\n{"a": 1}\n```') == {"a": 1}
 
 
-def _posting():
+def test_extract_json_tolerates_trailing_commas():
+    assert extract_json('{"a": [1, 2,], "b": 3,}') == {"a": [1, 2], "b": 3}
+
+
+def _posting(desc="Requirements: Python and AWS. Must have 5 years."):
     return Posting(source="greenhouse", source_url="https://x/jobs/1", company="Acme",
-                   title="Senior Backend Engineer",
-                   description="Requirements: Python and AWS. Must have 5 years.")
+                   title="Senior Backend Engineer", description=desc)
 
 
 def test_llm_extractor_drops_fabricated_skills():
-    # Model claims Rust with a quote that ISN'T in the JD -> must be dropped.
+    # Model claims Rust, which ISN'T in the JD -> grounding drops it.
     reply = json.dumps({
         "must_have_skills": ["Python", "AWS", "Rust"],
         "nice_to_have_skills": [],
-        "years_experience": 5,
-        "work_authorization": None,
-        "evidence": {
-            "Python": "Requirements: Python and AWS.",
-            "AWS": "Python and AWS.",
-            "Rust": "We love Rust here.",          # NOT in the JD
-            "years_experience": "Must have 5 years.",
-        },
     })
     extractor = BedrockExtractor(BedrockLLM(client=FakeBedrockClient(reply)))
     reqs = extractor.extract(_posting())
     assert "python" in reqs.must_have_skills
     assert "aws" in reqs.must_have_skills
     assert "rust" not in reqs.must_have_skills          # fabrication rejected
-    assert reqs.years_experience == 5
-    # every surviving skill carries grounded evidence
+    assert reqs.years_experience == 5                    # from the heuristic baseline
     for s in reqs.must_have_skills:
-        assert s in reqs.evidence
+        assert s in reqs.evidence                        # grounded evidence present
 
 
-def test_llm_extractor_grounds_fields_and_hard_reqs():
-    reply = json.dumps({
-        "must_have_skills": ["Python"],
-        "work_authorization": "Must be authorized to work in the US",
-        "evidence": {
-            "Python": "Python and AWS",
-            "work_authorization": "hallucinated quote not present",
-        },
-    })
-    # work_authorization quote isn't in the JD -> field dropped, no hard req
-    reqs = BedrockExtractor(BedrockLLM(client=FakeBedrockClient(reply))).extract(_posting())
-    assert reqs.work_authorization is None
-    assert reqs.hard_requirements == []
+def test_llm_extractor_keeps_deterministic_fields_from_heuristic():
+    jd = "Requirements: Python. Must be authorized to work in the US. Bachelor's degree."
+    reply = json.dumps({"must_have_skills": ["Python"], "nice_to_have_skills": []})
+    reqs = BedrockExtractor(BedrockLLM(client=FakeBedrockClient(reply))).extract(_posting(jd))
+    # work authorization + hard requirement come from the deterministic heuristic
+    assert reqs.work_authorization is not None
+    assert "work_authorization" in reqs.hard_requirements
+    assert reqs.education and "bachelor" in reqs.education.lower()
 
 
 def test_llm_cover_letter_uses_client_and_facts():

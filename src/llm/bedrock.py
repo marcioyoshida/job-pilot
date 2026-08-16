@@ -49,8 +49,22 @@ class BedrockLLM:
 
 
 def extract_json(text: str) -> dict:
-    """Pull the first {...} JSON object out of a model reply (tolerates fences)."""
-    m = _JSON_BLOCK.search(text)
+    """Pull the first {...} JSON object out of a model reply.
+
+    Tolerates ```json fences, trailing commas, and stray control characters,
+    which small models occasionally emit around otherwise-valid JSON.
+    """
+    t = text.strip()
+    if t.startswith("```"):
+        t = re.sub(r"^```[a-zA-Z]*\n?", "", t)
+        t = re.sub(r"\n?```$", "", t).strip()
+    m = _JSON_BLOCK.search(t)
     if not m:
         raise ValueError("no JSON object in model output")
-    return json.loads(m.group(0))
+    raw = m.group(0)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        cleaned = re.sub(r",(\s*[}\]])", r"\1", raw)                 # trailing commas
+        cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", " ", cleaned)  # control chars
+        return json.loads(cleaned)

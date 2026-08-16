@@ -156,91 +156,79 @@ class HeuristicExtractor:
 
 
 _LLM_SYSTEM = (
-    "You extract structured hiring requirements from a job description. "
-    "Return ONLY a JSON object with keys: must_have_skills, nice_to_have_skills "
-    "(arrays of short skill names), years_experience (int or null), education "
-    "(string or null), work_authorization (string or null), seniority (string or "
-    "null), responsibilities (array), certifications (array), languages (array), "
-    "comp (string or null), screening_questions (array), and evidence (object "
-    "mapping each skill name and each non-null field to a VERBATIM quote copied "
-    "from the job description). "
-    "Rules: never invent anything not present in the text. If a field is not "
-    "stated, use null or an empty array. Every skill and field you report MUST "
-    "have a verbatim quote in `evidence`."
+    "You read a job description and list the technical skills it asks for. "
+    "Return ONLY a JSON object: "
+    '{"must_have_skills": [...], "nice_to_have_skills": [...]}. '
+    "Use short skill names (e.g. \"python\", \"kubernetes\", \"postgres\", "
+    "\"distributed systems\"). must_have = required; nice_to_have = "
+    "preferred/bonus. No commentary, no other keys, and do not invent skills "
+    "that are not in the text."
 )
 
 
-class BedrockExtractor:
-    """LLM-assisted extractor (higher recall than the heuristic).
+def _ground_skills(names, jd: str, jd_low: str) -> tuple[list[str], dict[str, str]]:
+    """Keep only model-returned skills that actually appear in the JD (word
+    boundary), normalize them, and record a JD snippet as evidence. This is the
+    anti-fabrication guard: a hallucinated skill has no JD match and is dropped."""
+    kept: list[str] = []
+    ev: dict[str, str] = {}
+    for name in names or []:
+        n = str(name).strip().lower()
+        if not n:
+            continue
+        m = re.search(r"\b" + re.escape(n) + r"\b", jd_low)
+        if not m:
+            continue
+        canon = normalize_skill(n)
+        if canon not in kept:
+            kept.append(canon)
+            ev[canon] = _snippet(jd, m.start(), m.end())
+    return kept, ev
 
-    Anti-fabrication guardrail: the model must return a verbatim JD quote for
-    every skill/field, and `_to_requirements` DROPS anything whose quote is not
-    actually a substring of the JD. So even if the model hallucinates a skill,
-    it can't survive into the output.
+
+class BedrockExtractor:
+    """LLM-augmented extractor: the model widens skill recall, the heuristic
+    supplies the deterministic fields, and Python grounds every skill against
+    the JD.
+
+    The model returns ONLY short skill-name arrays — trivial to emit as valid
+    JSON (the earlier verbatim-quote design produced unparseable JSON). Skills
+    are then grounded in `_ground_skills` (word-boundary match against the JD),
+    so a fabricated skill can't survive. years / education / work-authorization /
+    seniority / remote come from the deterministic HeuristicExtractor.
     """
 
     def __init__(self, llm: "object | None" = None) -> None:
         from src.llm.bedrock import BedrockLLM
 
         self.llm = llm or BedrockLLM()
+        self._heur = HeuristicExtractor()
 
     def extract(self, posting: Posting) -> Requirements:
+        reqs = self._heur.extract(posting)          # deterministic baseline
         jd = f"{posting.title}\n{posting.description}"
-        data = self.llm.converse_json(_LLM_SYSTEM, jd)
-        return self._to_requirements(posting, jd, data)
+        data = self.llm.converse_json(_LLM_SYSTEM, jd, max_tokens=400, temperature=0.0)
 
-    @staticmethod
-    def _grounded(names: list, evidence: dict, jd_low: str) -> tuple[list[str], dict]:
-        kept: list[str] = []
-        ev: dict[str, str] = {}
-        for name in names or []:
-            quote = (evidence or {}).get(name) or (evidence or {}).get(str(name).lower())
-            if quote and quote.lower() in jd_low:
-                canon = normalize_skill(str(name))
-                if canon not in kept:
-                    kept.append(canon)
-                    ev[canon] = quote
-        return kept, ev
-
-    def _to_requirements(self, posting: Posting, jd: str, data: dict) -> Requirements:
         jd_low = jd.lower()
-        evidence_in = data.get("evidence", {}) or {}
-        must, ev_must = self._grounded(data.get("must_have_skills", []), evidence_in, jd_low)
-        nice, ev_nice = self._grounded(data.get("nice_to_have_skills", []), evidence_in, jd_low)
-        nice = [s for s in nice if s not in must]
+        must, ev_must = _ground_skills(data.get("must_have_skills", []), jd, jd_low)
+        nice, ev_nice = _ground_skills(data.get("nice_to_have_skills", []), jd, jd_low)
 
-        evidence = {**ev_must, **ev_nice}
+        # union LLM skills with the heuristic baseline; must wins over nice
+        merged_must = _dedupe(reqs.must_have_skills + must)
+        merged_nice = [s for s in _dedupe(reqs.nice_to_have_skills + nice)
+                       if s not in merged_must]
+        reqs.must_have_skills = merged_must
+        reqs.nice_to_have_skills = merged_nice
+        reqs.evidence = {**reqs.evidence, **ev_must, **ev_nice}
+        return reqs
 
-        def _grounded_field(key: str):
-            val = data.get(key)
-            quote = evidence_in.get(key)
-            if val and quote and str(quote).lower() in jd_low:
-                evidence[key] = quote
-                return val
-            return None
 
-        work_auth = _grounded_field("work_authorization")
-        hard = ["work_authorization"] if work_auth else []
-
-        return Requirements(
-            must_have_skills=must,
-            nice_to_have_skills=nice,
-            years_experience=data.get("years_experience") if isinstance(
-                data.get("years_experience"), int) else None,
-            education=_grounded_field("education"),
-            work_authorization=work_auth,
-            seniority=data.get("seniority"),
-            responsibilities=data.get("responsibilities", []) or [],
-            certifications=data.get("certifications", []) or [],
-            languages=data.get("languages", []) or [],
-            comp=data.get("comp"),
-            screening_questions=data.get("screening_questions", []) or [],
-            location=posting.location or None,
-            remote_policy=posting.remote_policy or None,
-            application_method=f"{posting.source}:{posting.source_url}",
-            hard_requirements=hard,
-            evidence=evidence,
-        )
+def _dedupe(items: list[str]) -> list[str]:
+    out: list[str] = []
+    for x in items:
+        if x not in out:
+            out.append(x)
+    return out
 
 
 _DEFAULT = HeuristicExtractor()
