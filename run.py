@@ -282,6 +282,57 @@ def cmd_status(args) -> int:
     return 0
 
 
+def cmd_import_resume(args) -> int:
+    """Convert a resume file into config/candidate.yaml."""
+    import os
+
+    from src.profile.candidate import CandidateProfile
+    from src.profile.import_resume import (
+        build_profile_dict,
+        profile_from_text_heuristic,
+        profile_from_text_llm,
+        read_resume_text,
+        to_yaml,
+    )
+
+    try:
+        text = read_resume_text(args.file)
+    except (FileNotFoundError, RuntimeError) as exc:
+        raise SystemExit(str(exc))
+    if not text.strip():
+        raise SystemExit(f"no text extracted from {args.file}")
+
+    use_llm = args.llm or os.environ.get("JOBPILOT_USE_LLM", "").lower() in ("1", "true", "yes")
+    raw = None
+    if use_llm:
+        try:
+            from src.llm.bedrock import BedrockLLM
+            raw = profile_from_text_llm(text, BedrockLLM())
+            print(f"structured with Bedrock ({BedrockLLM().model_id}).")
+        except Exception as exc:  # noqa: BLE001
+            print(f"LLM import failed ({exc}); using heuristic.")
+    if raw is None:
+        raw = profile_from_text_heuristic(text)
+
+    profile = build_profile_dict(raw)
+    # sanity: it must parse back into a CandidateProfile
+    parsed = CandidateProfile.from_dict(profile)
+
+    out = Path(args.out)
+    if out.exists() and not args.force:
+        raise SystemExit(f"{out} already exists — pass --force to overwrite, or --out <path>.")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(to_yaml(profile), encoding="utf-8")
+
+    print(f"\nwrote {out}")
+    print(f"  name:     {profile['name'] or '(none found)'}")
+    print(f"  headline: {profile['headline'] or '(none found)'}")
+    print(f"  skills:   {len(parsed.normalized_skills())}  ({', '.join(parsed.normalized_skills()[:10])}…)")
+    print(f"  bullets:  {len(profile['master_bullets'])}")
+    print("\nReview it before running the pipeline — this profile drives fit + tailoring.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="job-pilot")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -330,10 +381,17 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument("--key", required=True)
     st.add_argument("--set", required=True, help="new lifecycle status")
 
+    ir = sub.add_parser("import-resume")
+    ir.add_argument("--file", required=True, help="resume file (.pdf/.docx/.txt/.md)")
+    ir.add_argument("--out", default="config/candidate.yaml")
+    ir.add_argument("--llm", action="store_true", help="structure with Bedrock (recommended)")
+    ir.add_argument("--force", action="store_true", help="overwrite an existing --out")
+
     args = parser.parse_args(argv)
     handlers = {"gather": cmd_gather, "pipeline": cmd_pipeline,
                 "review": cmd_review, "approve": cmd_approve, "submit": cmd_submit,
-                "monitor": cmd_monitor, "status": cmd_status}
+                "monitor": cmd_monitor, "status": cmd_status,
+                "import-resume": cmd_import_resume}
     return handlers[args.cmd](args)
 
 

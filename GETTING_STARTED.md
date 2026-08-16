@@ -18,8 +18,18 @@ the commands below, or prefix them with `.venv/bin/`.
 
 ```bash
 cp config/search_profile.example.yaml config/search_profile.yaml && $EDITOR config/search_profile.yaml
-cp config/candidate.example.yaml       config/candidate.yaml       && $EDITOR config/candidate.yaml
 ```
+
+For the candidate profile, import your resume instead of hand-writing YAML:
+
+```bash
+python run.py import-resume --file ~/resume.pdf --llm    # .pdf/.docx/.txt/.md
+$EDITOR config/candidate.yaml                            # review the result
+```
+
+`--llm` structures it with Bedrock (recommended); without it, an offline
+heuristic is used. It never invents experience — bullets come from your resume.
+Or start from the example: `cp config/candidate.example.yaml config/candidate.yaml`.
 
 ## Secrets — never commit
 
