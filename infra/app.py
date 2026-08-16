@@ -13,13 +13,11 @@ Provisions:
     Secrets Manager secret holding Gmail app-password creds
 
 Deploy is done on a machine with real my2027 credentials — see
-docs/2026-08-16-phase6-serverless.md. This file was written against the CDK v2
-API but has NOT been `cdk synth`'d in this sandbox (no creds/Docker here);
-run `cdk synth` first and adjust if your CDK version differs.
+docs/2026-08-16-phase6-serverless.md.
 
-NOTE: PythonFunction (aws-lambda-python-alpha) bundles requirements.txt and needs
-Docker available at synth/deploy time. If Docker isn't available, swap to a
-plain aws_lambda.Function with a prebuilt layer (see the runbook).
+Docker-free: the Lambda needs only stdlib + boto3 (both in the Python runtime),
+because config is read from S3 as JSON, so a plain aws_lambda.Function with
+Code.from_asset is enough — no bundling, no PythonFunction, no Docker.
 """
 from __future__ import annotations
 
@@ -36,7 +34,6 @@ from aws_cdk import (
     aws_lambda as lambda_,
     aws_s3 as s3,
 )
-from aws_cdk.aws_lambda_python_alpha import PythonFunction
 from constructs import Construct
 
 ACCOUNT = "668449743071"   # my2027
@@ -63,12 +60,17 @@ class JobPilotStack(cdk.Stack):
             removal_policy=RemovalPolicy.RETAIN,   # holds your materials/feed
         )
 
-        fn = PythonFunction(
+        fn = lambda_.Function(
             self, "Pipeline",
-            entry=REPO_ROOT,                       # bundles requirements.txt
-            index="src/aws/handler.py",
-            handler="pipeline_handler",
             runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.aws.handler.pipeline_handler",
+            code=lambda_.Code.from_asset(REPO_ROOT, exclude=[
+                ".git", ".git/**", ".venv", ".venv/**", ".venv-infra", ".venv-infra/**",
+                "tests", "tests/**", "infra", "infra/**", "materials", "materials/**",
+                "packages", "packages/**", "applications", "applications/**",
+                "build", "build/**", "docs", "docs/**", "**/__pycache__", "**/__pycache__/**",
+                "*.md", "config/*.yaml", ".jobpilot", ".jobpilot/**",
+            ]),
             timeout=Duration.minutes(5),
             memory_size=512,
             environment={

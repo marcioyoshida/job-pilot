@@ -333,6 +333,24 @@ def cmd_import_resume(args) -> int:
     return 0
 
 
+def cmd_export_config(args) -> int:
+    """Convert local YAML config to JSON for the Lambda to read from S3."""
+    import json
+
+    import yaml
+
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    for name in ("search_profile", "candidate"):
+        src = _require_config(f"config/{name}.yaml")
+        data = yaml.safe_load(src.read_text()) or {}
+        (out / f"{name}.json").write_text(json.dumps(data, ensure_ascii=False, indent=2))
+        print(f"wrote {out / (name + '.json')}")
+    print(f"\nUpload to S3:\n  aws s3 cp {out}/search_profile.json s3://<bucket>/config/\n"
+          f"  aws s3 cp {out}/candidate.json       s3://<bucket>/config/")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="job-pilot")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -387,11 +405,14 @@ def main(argv: list[str] | None = None) -> int:
     ir.add_argument("--llm", action="store_true", help="structure with Bedrock (recommended)")
     ir.add_argument("--force", action="store_true", help="overwrite an existing --out")
 
+    ec = sub.add_parser("export-config")
+    ec.add_argument("--out-dir", default="build/cloud-config")
+
     args = parser.parse_args(argv)
     handlers = {"gather": cmd_gather, "pipeline": cmd_pipeline,
                 "review": cmd_review, "approve": cmd_approve, "submit": cmd_submit,
                 "monitor": cmd_monitor, "status": cmd_status,
-                "import-resume": cmd_import_resume}
+                "import-resume": cmd_import_resume, "export-config": cmd_export_config}
     return handlers[args.cmd](args)
 
 

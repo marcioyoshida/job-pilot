@@ -109,7 +109,6 @@ def pipeline_handler(event, context):  # pragma: no cover - AWS wiring
     import os
 
     import boto3
-    import yaml
 
     from src.ingest.base import SearchProfile
     from src.profile.candidate import CandidateProfile
@@ -118,8 +117,8 @@ def pipeline_handler(event, context):  # pragma: no cover - AWS wiring
     bucket = os.environ["JOBPILOT_BUCKET"]
     s3 = boto3.client("s3")
 
-    def get_text(key: str) -> str:
-        return s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode("utf-8")
+    def get_json(key: str) -> dict:
+        return json.loads(s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode("utf-8"))
 
     def put_object(key: str, body: str) -> None:
         s3.put_object(Bucket=bucket, Key=key, Body=body.encode("utf-8"),
@@ -132,8 +131,10 @@ def pipeline_handler(event, context):  # pragma: no cover - AWS wiring
         val = boto3.client("secretsmanager").get_secret_value(SecretId=arn)["SecretString"]
         return json.loads(val)
 
-    profile = SearchProfile.from_dict(yaml.safe_load(get_text("config/search_profile.yaml")))
-    candidate = CandidateProfile.from_dict(yaml.safe_load(get_text("config/candidate.yaml")))
+    # JSON config so the Lambda needs no PyYAML — only stdlib + boto3 (runtime-provided),
+    # which keeps the deploy Docker-free. Produce these with `run.py export-config`.
+    profile = SearchProfile.from_dict(get_json("config/search_profile.json"))
+    candidate = CandidateProfile.from_dict(get_json("config/candidate.json"))
     state = DynamoDbState(os.environ.get("JOBPILOT_TABLE"))
 
     use_llm = os.environ.get("JOBPILOT_USE_LLM", "").lower() in ("1", "true", "yes")

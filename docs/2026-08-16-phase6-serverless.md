@@ -3,10 +3,11 @@
 Run the daily batch (gather → extract → match → tailor) unattended on AWS. The
 human review/approve/submit stays local (NFR-1) — the cloud job never submits.
 
-**Status:** code complete + unit-tested offline. The CDK stack (`infra/app.py`)
-was written against CDK v2 but **not** `cdk synth`'d in the build sandbox (no
-creds/Docker there). Do the first synth/deploy on your machine and adjust if
-your CDK version differs.
+**Status:** code complete + unit-tested, and the CDK stack **has been
+`cdk synth`'d** (CDK 2.1136, aws-cdk-lib 2.x) — it produces valid CloudFormation
+with a Docker-free Lambda asset (Handler `src.aws.handler.pipeline_handler`,
+`bedrock:InvokeModel`, daily `cron(0 7 * * ? *)`, DynamoDB PAY_PER_REQUEST,
+encrypted S3). Only `cdk deploy` remains, which needs your my2027 credentials.
 
 ## What gets deployed (fits CLAUDE.md: AWS-native, CFN, ~$100/mo, no idle floor)
 
@@ -29,9 +30,8 @@ bounded by how many new postings appear daily. No idle-floor services.
 
 - Real credentials for **my2027** (`668449743071`), region **us-east-1**
   (`python scripts/live_check.py` green).
-- **Docker** running (PythonFunction bundles `requirements.txt`). No Docker?
-  See "No-Docker" below.
 - Node + CDK v2: `npm i -g aws-cdk` (or `npx cdk`).
+- **No Docker needed** — the Lambda is a plain asset (stdlib + boto3 only).
 
 ## Deploy
 
@@ -41,16 +41,17 @@ pip install -r infra/requirements.txt
 
 cd infra
 cdk bootstrap aws://668449743071/us-east-1     # once per account/region
-cdk synth                                       # verify it builds; fix any version drift
+cdk synth                                       # already validated; sanity check
 cdk deploy                                      # note the BucketName output
 ```
 
-Then upload your config so the Lambda can read it:
+Then upload your config as JSON (the Lambda reads JSON so it needs no PyYAML):
 
 ```bash
+python run.py export-config                      # writes build/cloud-config/*.json
 BUCKET=<BucketName from the deploy output>
-aws s3 cp config/search_profile.yaml s3://$BUCKET/config/search_profile.yaml
-aws s3 cp config/candidate.yaml       s3://$BUCKET/config/candidate.yaml
+aws s3 cp build/cloud-config/search_profile.json s3://$BUCKET/config/
+aws s3 cp build/cloud-config/candidate.json       s3://$BUCKET/config/
 ```
 
 Trigger a run now (instead of waiting for 07:00 UTC), then read the feed:
@@ -84,10 +85,3 @@ aws s3 sync s3://$BUCKET/materials/ ./materials/
 
 A DynamoDB-backed ApplicationStore + a small dashboard reading `feed/latest.json`
 are the natural follow-ons if you want approve/submit in the cloud too.
-
-## No-Docker alternative
-
-If Docker isn't available for bundling, swap `PythonFunction` for
-`aws_lambda.Function` with `code=lambda_.Code.from_asset("..")` plus a Lambda
-layer containing PyYAML (boto3 is in the runtime). See the CDK docs for
-`lambda.LayerVersion`.
