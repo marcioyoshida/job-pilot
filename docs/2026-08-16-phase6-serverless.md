@@ -3,11 +3,19 @@
 Run the daily batch (gather → extract → match → tailor) unattended on AWS. The
 human review/approve/submit stays local (NFR-1) — the cloud job never submits.
 
-**Status:** code complete + unit-tested, and the CDK stack **has been
-`cdk synth`'d** (CDK 2.1136, aws-cdk-lib 2.x) — it produces valid CloudFormation
-with a Docker-free Lambda asset (Handler `src.aws.handler.pipeline_handler`,
-`bedrock:InvokeModel`, daily `cron(0 7 * * ? *)`, DynamoDB PAY_PER_REQUEST,
-encrypted S3). Only `cdk deploy` remains, which needs your my2027 credentials.
+**Status:** deployed 2026-08-16 on my2027 / us-east-1 (`JobPilot` stack CREATE_COMPLETE).
+Packaging follows the Onça hand-staged `build/lambda` asset (no Docker).
+
+Live outputs:
+
+| Output | Value |
+|---|---|
+| BucketName | `jobpilot-data666c94c7-6lsreryeo6va` |
+| FunctionName | `JobPilot-PipelineC660917D-UHtbd6BvciXz` |
+| TableName | `JobPilot-State1C20CC9A-1WIENF8AVFA7D` |
+
+First invoke (`2026-08-17T012347Z`) gathered 7 new GitLab/Coinbase postings; all
+were `skip` so no drafts were written (NFR-1 still holds — the job never submits).
 
 ## What gets deployed (fits CLAUDE.md: AWS-native, CFN, ~$100/mo, no idle floor)
 
@@ -29,9 +37,13 @@ bounded by how many new postings appear daily. No idle-floor services.
 ## One-time prerequisites
 
 - Real credentials for **my2027** (`668449743071`), region **us-east-1**
-  (`python scripts/live_check.py` green).
+  (`AWS_PROFILE=my2027 python scripts/live_check.py` green).
 - Node + CDK v2: `npm i -g aws-cdk` (or `npx cdk`).
-- **No Docker needed** — the Lambda is a plain asset (stdlib + boto3 only).
+- Account already bootstrapped (`CDKToolkit` in us-east-1).
+
+No Docker. The Lambda zip is assembled by `scripts/stage_lambda.sh` (rsync
+`src/` + a manylinux/CPython 3.11 PyYAML wheel). boto3 is in the Lambda
+runtime.
 
 ## Deploy
 
@@ -39,26 +51,31 @@ bounded by how many new postings appear daily. No idle-floor services.
 python -m venv .venv-infra && source .venv-infra/bin/activate
 pip install -r infra/requirements.txt
 
+scripts/stage_lambda.sh                 # rebuilds build/lambda
+
 cd infra
-cdk bootstrap aws://668449743071/us-east-1     # once per account/region
-cdk synth                                       # already validated; sanity check
-cdk deploy                                      # note the BucketName output
+export AWS_PROFILE=my2027 AWS_DEFAULT_REGION=us-east-1
+cdk synth                               # verify it builds
+cdk deploy                              # note BucketName / FunctionName outputs
 ```
 
-Then upload your config as JSON (the Lambda reads JSON so it needs no PyYAML):
+Then upload your config so the Lambda can read it:
 
 ```bash
-python run.py export-config                      # writes build/cloud-config/*.json
 BUCKET=<BucketName from the deploy output>
-aws s3 cp build/cloud-config/search_profile.json s3://$BUCKET/config/
-aws s3 cp build/cloud-config/candidate.json       s3://$BUCKET/config/
+aws s3 cp config/search_profile.yaml s3://$BUCKET/config/search_profile.yaml
+aws s3 cp config/candidate.yaml       s3://$BUCKET/config/candidate.yaml
 ```
+
+`run.py export-config` can emit JSON copies under `build/cloud-config/` if you
+want them; the live handler reads the YAML keys above.
 
 Trigger a run now (instead of waiting for 07:00 UTC), then read the feed:
 
 ```bash
-aws lambda invoke --function-name <JobPilot Pipeline fn name> /dev/stdout
-aws s3 cp s3://$BUCKET/feed/latest.json -   # ranked results + material keys
+aws lambda invoke --function-name <FunctionName> /tmp/jobpilot-invoke.json
+cat /tmp/jobpilot-invoke.json
+aws s3 cp s3://$BUCKET/feed/latest.json -
 ```
 
 ## Optional: LinkedIn alerts in the cloud
@@ -76,7 +93,7 @@ and grant read (`secret.grant_read(fn)`), then redeploy.
 ## Reviewing / applying
 
 The cloud job produces ranked drafts in S3; **approval + submission stay local**.
-Pull a run down and drive the same local flow:
+Pull a run down and drive the same local CLI:
 
 ```bash
 aws s3 sync s3://$BUCKET/materials/ ./materials/
@@ -85,3 +102,9 @@ aws s3 sync s3://$BUCKET/materials/ ./materials/
 
 A DynamoDB-backed ApplicationStore + a small dashboard reading `feed/latest.json`
 are the natural follow-ons if you want approve/submit in the cloud too.
+
+## Notes
+
+- `new_postings` marks keys seen **before** extract/tailor. A timed-out run
+  will not resurface those keys. Timeout is 15 minutes (Onça's 5-min lesson).
+- Rebuild the asset after any `src/` change: `scripts/stage_lambda.sh && cd infra && cdk deploy`.

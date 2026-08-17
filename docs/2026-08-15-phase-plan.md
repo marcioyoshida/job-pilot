@@ -69,16 +69,17 @@ Goal: a working single-user tool for the owner's own job search.
   injectable). CLI: `run.py monitor --inbox <file> | --gmail` (notifies on
   interview/offer/rejected) and `run.py status --key --set` (manual override).
   Tests: `tests/test_monitor.py` (51 total green).
-- **P6 — serverless (code done 2026-08-16; deploy pending on owner's machine).**
+- **P6 — serverless (DEPLOYED 2026-08-16 on my2027 / us-east-1).**
   `DynamoDbState` implemented (single-table seen-set + kv, injectable, tested).
   `src/aws/handler.py`: `run_pipeline` core (injectable state/sources/extractor/
   object-writer/LLM → writes `materials/<run>/…` + `feed/<run>.json` +
   `feed/latest.json` to S3; diff-aware; never submits) with `pipeline_handler`
-  wiring S3/DynamoDB/Bedrock. CDK stack `infra/app.py` (DynamoDB on-demand, S3,
-  Python Lambda, daily EventBridge rule, IAM for Bedrock/Dynamo/S3/Secrets) +
-  `infra/requirements.txt`. Runbook: `docs/2026-08-16-phase6-serverless.md`.
-  Tests: `tests/test_aws.py` (62 total green). Not `cdk synth`'d in-sandbox
-  (no creds/Docker) — first synth/deploy happens on the owner's machine.
+  wiring S3/DynamoDB/Bedrock. CDK stack `infra/app.py` follows the Onça
+  hand-staged `build/lambda` asset (no Docker): DynamoDB on-demand, S3,
+  Python Lambda, daily EventBridge (07:00 UTC), IAM for Bedrock/Dynamo/S3.
+  Staging: `scripts/stage_lambda.sh`. Runbook:
+  `docs/2026-08-16-phase6-serverless.md`. Tests: `tests/test_aws.py` (67 total
+  green). First live invoke: 7 postings, 0 drafts (all `skip`).
 
 - **LLM upgrade (DONE 2026-08-15).** `src/llm/bedrock.py` — injectable
   `BedrockLLM` over the Converse API (nova-lite default, model/region from env,
@@ -102,11 +103,11 @@ Goal: a working single-user tool for the owner's own job search.
 
 ## First thing next session
 
-P0 + P2 + P3 + P4 + P5 + the LLM upgrade are done — **all six stages** run
-(gather→extract→match→tailor→approve→submit→monitor), with the human-approval
-gate enforced and the Bedrock path live-verified on the owner's machine
-(nova-lite, us-east-1). 51 tests green. Remaining Phase-P options: **P1 —
-own-account LinkedIn** (the last source; ToS/account-risk work), **P6 —
-serverless** (port to Lambda/Step Functions/DynamoDB on my2027), or polish
-(more ATS sources like Ashby; richer notifications/digest). Tests cover every
-built stage plus the offline end-to-end chain.
+P0–P6 + the LLM upgrade are done — **all six stages** run locally
+(gather→extract→match→tailor→approve→submit→monitor), and the unattended
+gather→extract→match→tailor batch is live on my2027 (daily 07:00 UTC).
+Human-approval gate is still local (NFR-1). 67 tests green. Remaining
+Phase-P options: **P1 — own-account LinkedIn** (intentionally not built;
+alerts path is the ToS-clean source), more ATS sources (Ashby), a
+DynamoDB-backed ApplicationStore / dashboard so approve/submit can happen
+against `feed/latest.json`, or richer notifications/digest.

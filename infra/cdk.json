@@ -1,6 +1,8 @@
 {
   "app": "python app.py",
+  "profile": "my2027",
   "context": {
-    "@aws-cdk/core:newStyleStackSynthesis": true
+    "@aws-cdk/core:newStyleStackSynthesis": true,
+    "@aws-cdk/core:bootstrapQualifier": "hnb659fds"
   }
 }

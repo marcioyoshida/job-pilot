@@ -3,7 +3,9 @@
 .env.*
 *.pem
 config/search_profile.yaml
+config/candidate.yaml
 .jobpilot/
+build/
 
 # python
 __pycache__/

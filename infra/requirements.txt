@@ -1,5 +1,6 @@
 # CDK deploy tooling (install in a separate venv; not needed to run the pipeline
 # locally). Deploy from a machine with real my2027 credentials.
-# Docker-free: the Lambda is a plain Code.from_asset (stdlib + boto3 only).
+# Docker-free: hand-staged build/lambda (src/ + manylinux PyYAML). No
+# aws-lambda-python-alpha.
 aws-cdk-lib>=2.130
 constructs>=10.0

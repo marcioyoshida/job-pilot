@@ -12,16 +12,14 @@ Provisions:
   - IAM: Bedrock InvokeModel, DynamoDB RW, S3 RW, and (optional) read of a
     Secrets Manager secret holding Gmail app-password creds
 
-Deploy is done on a machine with real my2027 credentials — see
-docs/2026-08-16-phase6-serverless.md.
-
-Docker-free: the Lambda needs only stdlib + boto3 (both in the Python runtime),
-because config is read from S3 as JSON, so a plain aws_lambda.Function with
-Code.from_asset is enough — no bundling, no PythonFunction, no Docker.
+Lambda packaging follows Onça: a hand-staged `build/lambda` asset (src/ +
+PyYAML manylinux wheel). No Docker. Run `scripts/stage_lambda.sh` before
+synth/deploy. See docs/2026-08-16-phase6-serverless.md.
 """
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import aws_cdk as cdk
 from aws_cdk import (
@@ -39,12 +37,23 @@ from constructs import Construct
 ACCOUNT = "668449743071"   # my2027
 REGION = "us-east-1"
 BEDROCK_MODEL = os.environ.get("JOBPILOT_BEDROCK_MODEL", "amazon.nova-lite-v1:0")
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+LAMBDA_ASSET = REPO_ROOT / "build" / "lambda"
 
 
 class JobPilotStack(cdk.Stack):
     def __init__(self, scope: Construct, cid: str, **kw) -> None:
         super().__init__(scope, cid, **kw)
+
+        cdk.Tags.of(self).add("Application", "job-pilot")
+        cdk.Tags.of(self).add("Environment", "personal")
+        cdk.Tags.of(self).add("Phase", "P6")
+
+        if not (LAMBDA_ASSET / "src" / "aws" / "handler.py").is_file():
+            raise RuntimeError(
+                f"Lambda asset missing at {LAMBDA_ASSET}. "
+                "Run scripts/stage_lambda.sh before cdk synth/deploy."
+            )
 
         table = dynamodb.Table(
             self, "State",
@@ -60,20 +69,17 @@ class JobPilotStack(cdk.Stack):
             removal_policy=RemovalPolicy.RETAIN,   # holds your materials/feed
         )
 
+        # 15 min: Onça's ingest timed out at 5 min; first-run LLM per new
+        # apply/stretch posting can add up even with a tight title filter.
         fn = lambda_.Function(
             self, "Pipeline",
             runtime=lambda_.Runtime.PYTHON_3_11,
             handler="src.aws.handler.pipeline_handler",
-            code=lambda_.Code.from_asset(REPO_ROOT, exclude=[
-                ".git", ".git/**", ".venv", ".venv/**", ".venv-infra", ".venv-infra/**",
-                "tests", "tests/**", "infra", "infra/**", "materials", "materials/**",
-                "packages", "packages/**", "applications", "applications/**",
-                "build", "build/**", "docs", "docs/**", "**/__pycache__", "**/__pycache__/**",
-                "*.md", "config/*.yaml", ".jobpilot", ".jobpilot/**",
-            ]),
-            timeout=Duration.minutes(5),
-            memory_size=512,
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(15),
+            memory_size=1024,
             environment={
+                "PYTHONPATH": "/var/task",
                 "JOBPILOT_BUCKET": bucket.bucket_name,
                 "JOBPILOT_TABLE": table.table_name,
                 "JOBPILOT_USE_LLM": os.environ.get("JOBPILOT_USE_LLM", "true"),
@@ -86,7 +92,10 @@ class JobPilotStack(cdk.Stack):
         bucket.grant_read_write(fn)
         fn.add_to_role_policy(iam.PolicyStatement(
             actions=["bedrock:InvokeModel"],
-            resources=[f"arn:aws:bedrock:{REGION}::foundation-model/*"],
+            resources=[
+                f"arn:aws:bedrock:{REGION}::foundation-model/{BEDROCK_MODEL}",
+                f"arn:aws:bedrock:{REGION}::foundation-model/*",
+            ],
         ))
 
         # once-daily schedule (07:00 UTC). Adjust to taste.
@@ -98,6 +107,7 @@ class JobPilotStack(cdk.Stack):
 
         cdk.CfnOutput(self, "BucketName", value=bucket.bucket_name)
         cdk.CfnOutput(self, "TableName", value=table.table_name)
+        cdk.CfnOutput(self, "FunctionName", value=fn.function_name)
 
 
 app = cdk.App()
