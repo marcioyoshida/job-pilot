@@ -146,12 +146,18 @@ def cmd_pipeline(args) -> int:
     rows.sort(key=lambda r: r[2].fit_score, reverse=True)
 
     print(f"{len(rows)} new posting(s), ranked by fit (score is ESTIMATED):\n")
+    from datetime import datetime, timezone
+
+    from src.dashboard.render import feed_item
+
     made = 0
+    feed = []
     for p, reqs, fit in rows:
         gaps = ", ".join(fit.gaps[:6]) or "none"
         print(f"  {fit.fit_score:>5.0%}  [{fit.recommendation:<7}] {p.company} — {p.title}")
         print(f"         gaps: {gaps}")
         print(f"         {p.source_url}")
+        materials_key = None
         # Draft tailored materials for worth-applying roles (DRAFT — not submitted).
         if args.tailor and fit.recommendation in ("apply", "stretch"):
             from src.apply.records import ApplicationRecord, ApplicationStore
@@ -159,6 +165,7 @@ def cmd_pipeline(args) -> int:
 
             materials = build_materials(candidate, p, reqs, fit, llm=llm)
             path = write_materials(materials, p, args.materials_dir)
+            materials_key = str(path)
             ApplicationStore(STORE_PATH).upsert(ApplicationRecord(
                 key=p.dedupe_key(), company=p.company, title=p.title,
                 source=p.source, source_url=p.source_url,
@@ -167,9 +174,30 @@ def cmd_pipeline(args) -> int:
             ))
             print(f"         draft materials -> {path}  (PENDING YOUR APPROVAL)")
             made += 1
+        feed.append(feed_item(p, fit, materials_key))
+
+    import json as _json
+    payload = {"generated_at": datetime.now(timezone.utc).isoformat(), "items": feed}
+    Path(args.feed_out).write_text(_json.dumps(payload, ensure_ascii=False, indent=2))
+    print(f"\nfeed -> {args.feed_out}   (render with `python run.py dashboard`)")
     if args.tailor:
-        print(f"\n{made} draft(s) written & registered. Next: "
+        print(f"{made} draft(s) written & registered. Next: "
               f"`python run.py review` then `approve` then `submit`.")
+    return 0
+
+
+def cmd_dashboard(args) -> int:
+    """Render a feed.json into a standalone HTML dashboard."""
+    import json
+
+    from src.dashboard.render import render_feed_html
+
+    feed_path = Path(args.feed)
+    if not feed_path.exists():
+        raise SystemExit(f"{feed_path} not found — run `pipeline` first (it writes feed.json).")
+    payload = json.loads(feed_path.read_text())
+    Path(args.out).write_text(render_feed_html(payload), encoding="utf-8")
+    print(f"wrote {args.out}  ({len(payload.get('items', []))} postings) — open it in a browser.")
     return 0
 
 
@@ -371,6 +399,8 @@ def main(argv: list[str] | None = None) -> int:
             sp.add_argument("--tailor", action="store_true",
                             help="write DRAFT tailored materials for apply/stretch roles")
             sp.add_argument("--materials-dir", default="materials")
+            sp.add_argument("--feed-out", default="feed.json",
+                            help="where to write the ranked feed (for the dashboard)")
             sp.add_argument("--llm", action="store_true",
                             help="use Bedrock for extraction + cover letter (needs AWS creds)")
 
@@ -408,11 +438,16 @@ def main(argv: list[str] | None = None) -> int:
     ec = sub.add_parser("export-config")
     ec.add_argument("--out-dir", default="build/cloud-config")
 
+    db = sub.add_parser("dashboard")
+    db.add_argument("--feed", default="feed.json")
+    db.add_argument("--out", default="dashboard.html")
+
     args = parser.parse_args(argv)
     handlers = {"gather": cmd_gather, "pipeline": cmd_pipeline,
                 "review": cmd_review, "approve": cmd_approve, "submit": cmd_submit,
                 "monitor": cmd_monitor, "status": cmd_status,
-                "import-resume": cmd_import_resume, "export-config": cmd_export_config}
+                "import-resume": cmd_import_resume, "export-config": cmd_export_config,
+                "dashboard": cmd_dashboard}
     return handlers[args.cmd](args)
 
 

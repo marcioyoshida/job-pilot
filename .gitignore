@@ -24,3 +24,5 @@ packages/
 applications/
 *.resume.json
 *.eml
+feed.json
+dashboard.html

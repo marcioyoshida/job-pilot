@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Callable, Optional
 
 # Concrete imports (kept explicit for Lambda cold-start clarity)
+from src.dashboard.render import feed_item
 from src.diff.engine import new_postings
 from src.match.fit import analyze_fit
 from src.tailor.build import build_materials
@@ -59,22 +60,16 @@ def run_pipeline(
             print(f"extract failed for {p.company} ({exc}); heuristic fallback")
             reqs = extract_requirements(p)
         fit = analyze_fit(reqs, cand_skills)
-        item = {
-            "key": p.dedupe_key(), "company": p.company, "title": p.title,
-            "source": p.source, "source_url": p.source_url,
-            "fit_score": fit.fit_score, "recommendation": fit.recommendation,
-            "estimated": fit.estimated, "gaps": fit.gaps,
-        }
+        materials_key = None
         if fit.recommendation in ("apply", "stretch"):
             materials = build_materials(candidate, p, reqs, fit, llm=cover_llm)
-            key = f"materials/{run_id}/{p.dedupe_key()}.json"
-            put_object(key, json.dumps({
+            materials_key = f"materials/{run_id}/{p.dedupe_key()}.json"
+            put_object(materials_key, json.dumps({
                 "status": "draft_pending_approval",
-                "posting": item,
+                "posting": feed_item(p, fit),
                 "materials": asdict(materials),
             }, ensure_ascii=False, indent=2))
-            item["materials_key"] = key
-        feed.append(item)
+        feed.append(feed_item(p, fit, materials_key))
 
     feed.sort(key=lambda i: i["fit_score"], reverse=True)
     body = json.dumps({"run_id": run_id, "generated_at": run_id, "items": feed},

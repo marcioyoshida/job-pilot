@@ -87,6 +87,17 @@ rejected), matches it to an application (a company signal is required — it won
 guess), advances the status **forward-only**, and notifies on interview/offer/
 rejection. Every change is logged to the record's history.
 
+### See the feed as a page
+
+Every `pipeline` run writes `feed.json`. Render it to a standalone HTML page:
+
+```bash
+python run.py dashboard          # feed.json -> dashboard.html; open in a browser
+```
+
+Ranked cards with the fit badge, gap chips, a draft-ready marker, and a link to
+each posting. Light/dark aware, no external assets.
+
 ## Optional: the LLM path (Bedrock)
 
 The pipeline runs fully on the offline heuristic. To use Bedrock (Amazon Nova
